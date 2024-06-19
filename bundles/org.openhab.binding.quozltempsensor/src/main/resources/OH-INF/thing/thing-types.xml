@@ -1,0 +1,40 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<thing:thing-descriptions bindingId="quozltempsensor"
+    xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+    xmlns:thing="https://openhab.org/schemas/thing-description/v1.0.0"
+    xsi:schemaLocation="https://openhab.org/schemas/thing-description/v1.0.0 https://openhab.org/schemas/thing-description-1.0.0.xsd">
+
+    <thing-type id="tempsensor">
+        <label>Quozl Temp Sensor</label>
+        <description>Fixed baud serial port which can receive data</description>
+        <category>Sensor</category>
+
+        <!-- Create channels dynamically based on number of active temp probes -->
+
+        <config-description>
+            <parameter name="serialPort" type="text" required="true">
+                <context>serial-port</context>
+                <limitToOptions>false</limitToOptions>
+                <label>Serial Port</label>
+                <description>The serial port to use (e.g. Linux: /dev/ttyUSB0, Windows: COM1)</description>
+            </parameter>
+            <parameter name="tempUnits" type="text" required="true">
+                <limitToOptions>true</limitToOptions>
+                <label>Temperature Units</label>
+                <description>Imperial or Metric temperature units</description>
+                <default>Celsius</default>
+                <options>
+                    <option value="Celsius">Celsius</option>
+                    <option value="Fahrenheit">Fahrenheit</option>
+                </options>        
+            </parameter>
+        </config-description>
+    </thing-type>
+
+    <channel-type id="tempChannel">
+        <item-type>Number:Temperature</item-type>
+        <label>Temperature</label>
+        <description>Temperature channel for quozltempsensor Binding</description>
+        <state readOnly="true" pattern="%.1f %unit%" />
+    </channel-type>
+</thing:thing-descriptions>
