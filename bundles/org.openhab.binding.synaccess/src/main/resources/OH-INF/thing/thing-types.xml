@@ -1,0 +1,117 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<thing:thing-descriptions bindingId="synaccess"
+	xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+	xmlns:thing="https://openhab.org/schemas/thing-description/v1.0.0"
+	xsi:schemaLocation="https://openhab.org/schemas/thing-description/v1.0.0 https://openhab.org/schemas/thing-description-1.0.0.xsd">
+
+    <bridge-type id="ipbridge">
+        <label>Synaccess Telnet Access Point</label>
+        <description>Telnet IP access point to Synaccess Power Distribution Unit</description>
+        <properties>
+            <property name="vendor">Synaccess</property>
+        </properties>
+
+        <representation-property>ipAddress</representation-property>
+
+        <config-description>
+            <parameter name="ipAddress" type="text" required="true">
+                <context>network-address</context>
+                <label>IP or Host Name</label>
+                <description>The IP or host name of the Synaccess Power Distribution Unit</description>
+                <default>192.168.1.100</default>
+            </parameter>
+            <parameter name="port" type="integer" required="true">
+                <context>network-address</context>
+                <label>Port</label>
+                <description>Telnet Port</description>
+                <default>23</default>
+            </parameter>
+            <parameter name="user" type="text">
+                <label>User Name</label>
+                <description>The user name to log in to the Power Distribution Unit</description>
+            </parameter>
+            <parameter name="password" type="text">
+                <context>password</context>
+                <label>Password</label>
+                <description>The user password to log in to the Power Distribution Unit</description>
+            </parameter>
+            <parameter name="reconnect" type="integer" min="1" max="60" unit="min">
+                <label>Reconnect Interval</label>
+                <description>The period in minutes that the handler will wait between connection attempts</description>
+                <unitLabel>minutes</unitLabel>
+                <default>5</default>
+                <advanced>true</advanced>
+            </parameter>
+            <parameter name="heartbeat" type="integer" min="1" max="60" unit="min">
+                <label>Keepalive Heartbeat Interval</label>
+                <description>The period in minutes between connection heartbeat checks</description>
+                <unitLabel>minutes</unitLabel>
+                <default>5</default>
+                <advanced>true</advanced>
+            </parameter>
+        </config-description>
+    </bridge-type>
+
+    <bridge-type id="serialbridge">
+        <label>Synaccess RS232 Bridge</label>
+        <description>RS232 access point to Synaccess Power Distribution Unit</description>
+        
+        <representation-property>uniqueId</representation-property>
+
+        <config-description>
+            <parameter name="serialPort" type="text" required="true">
+                <context>serial-port</context>
+                <limitToOptions>false</limitToOptions>
+                <label>Synaccess Bridge Serial Port</label>
+                <description>
+                    The serial port name for the Synaccess PDU. Valid values
+                    are e.g. COM1 for Windows and /dev/ttyS0
+                    or /dev/ttyUSB0 for Linux.
+                </description>
+            </parameter>
+            <parameter name="baudRate" type="integer" required="false">
+                <label>Baud Rate</label>
+                <description>
+                    The baud rate to use for the RS232 connection.
+                    Valid values are 2400, 9600 (default), and 19200.
+                </description>
+                <default>9600</default>
+                <limitToOptions>true</limitToOptions>
+                <options>
+                    <option value="2400">2400</option>
+                    <option value="9600">9600</option>
+                    <option value="19200">19200</option>
+                </options>
+            </parameter>
+        </config-description>
+    </bridge-type>
+
+    <thing-type id="pdu">
+        <supported-bridge-type-refs>
+            <bridge-type-ref id="ipbridge"/>
+            <bridge-type-ref id="serialbridge"/>
+        </supported-bridge-type-refs>
+        <label>Synaccess PDU</label>
+        <description>Controls switched loads</description>
+        <representation-property>ipAddress</representation-property>
+    </thing-type>
+    
+    <channel-type id="switchState">
+        <item-type>Switch</item-type>
+        <label>Switch State</label>
+        <description>On/off status of the switch</description>
+        <category>Switch</category>
+    </channel-type>
+    
+    <channel-type id="commandChannel">
+        <item-type>String</item-type>
+        <label>Send Command</label>
+        <description>Send Command to PDU</description>
+        <command>
+            <options>
+                <option value="ALL_ON">All On</option>
+                <option value="ALL_OFF">All Off</option>
+            </options>
+        </command>
+    </channel-type>  
+</thing:thing-descriptions>
