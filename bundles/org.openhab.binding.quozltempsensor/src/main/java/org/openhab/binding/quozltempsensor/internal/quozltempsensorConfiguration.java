@@ -33,8 +33,14 @@ public class quozltempsensorConfiguration {
      */
     public @Nullable String tempUnits;
 
+    /**
+     * Temperature units
+     */
+    public @Nullable String precision;
+
     @Override
     public String toString() {
-        return "SerialBridgeConfiguration [serialPort=" + serialPort + ", tempUnits=" + tempUnits + "]";
+        return "SerialBridgeConfiguration [serialPort=" + serialPort + ", tempUnits=" + tempUnits + ", precision="
+                + precision + "]";
     }
 }

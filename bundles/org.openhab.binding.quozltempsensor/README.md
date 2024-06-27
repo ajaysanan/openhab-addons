@@ -1,94 +1,51 @@
-# quozltempsensor Binding
+# Quozl Temperature Sensor Binding
 
-_Give some details about what this binding is meant for - a protocol, system, specific device._
+This is a binding for a one wire (1-wire) temperature sensor built around the DS1820 sensors.  The device allow up to 4 DS1820 sensors that continually report via a programmed 12C509 PIC.  The design is old but functions very reliably.  Sensors can be up to 200 yards/meters from the control device. The unit is powered from the serial port; no external power is required in most cases (USB serial devices possibly may not satisfy this requirement).
 
-_If possible, provide some resources like pictures (only PNG is supported currently), a video, etc. to give an impression of what can be done with this binding._
-_You can place such resources into a `doc` folder next to this README.md._
+The design is from the year 2000 and does require construction of the control system as well as possible programming of the PIC.  Details and information are here:
 
-_Put each sentence in a separate line to improve readability of diffs._
+http://quozl.netrek.org/ts/
 
 ## Supported Things
 
-_Please describe the different supported things / devices including their ThingTypeUID within this section._
-_Which different types are supported, which models were tested etc.?_
-_Note that it is planned to generate some part of this based on the XML files within ```src/main/resources/OH-INF/thing``` of your binding._
-
-- `bridge`: Short description of the Bridge, if any
-- `sample`: Short description of the Thing with the ThingTypeUID `sample`
+The binding only supports one thing type, which is the sensor unit itself:
+* **tempsensor** - Temperature Sensor Unit
 
 ## Discovery
 
-_Describe the available auto-discovery features here._
-_Mention for what it works and what needs to be kept in mind when using it._
-
-## Binding Configuration
-
-_If your binding requires or supports general configuration settings, please create a folder ```cfg``` and place the configuration file ```<bindingId>.cfg``` inside it._
-_In this section, you should link to this file and provide some information about the options._
-_The file could e.g. look like:_
-
-```
-# Configuration for the quozltempsensor Binding
-#
-# Default secret key for the pairing of the quozltempsensor Thing.
-# It has to be between 10-40 (alphanumeric) characters.
-# This may be changed by the user for security reasons.
-secret=openHABSecret
-```
-
-_Note that it is planned to generate some part of this based on the information that is available within ```src/main/resources/OH-INF/binding``` of your binding._
-
-_If your binding does not offer any generic configurations, you can remove this section completely._
+Discovery is not possible.  
 
 ## Thing Configuration
 
-_Describe what is needed to manually configure a thing, either through the UI or via a thing-file._
-_This should be mainly about its mandatory and optional configuration parameters._
+Only two configuration parameters are available and both are required.
 
-_Note that it is planned to generate some part of this based on the XML files within ```src/main/resources/OH-INF/thing``` of your binding._
+- **Serial Port (serialPort)**
 
-### `sample` Thing Configuration
+Selection of the serial port (e.g "COM1" or "/dev/ttyUSB1"). The device runs at a fixed non-configurable speed of 2400, N, 8, 1.
 
-| Name            | Type    | Description                           | Default | Required | Advanced |
-|-----------------|---------|---------------------------------------|---------|----------|----------|
-| hostname        | text    | Hostname or IP address of the device  | N/A     | yes      | no       |
-| password        | text    | Password to access the device         | N/A     | yes      | no       |
-| refreshInterval | integer | Interval the device is polled in sec. | 600     | no       | yes      |
+- **Temperature Units (tempUnits)**
+
+The controller is hardwired as Celsius or Fahrenheit and this must be specified in the configuration.  However, the device reports whether it is Celsius or Fahrenheit upon initialization; if detected, this will override the user supplied parameter.
+
+Thing configuration file example:
+
+```
+    quozltempsensor:tempsensor:sensor1 [ serialPort="COM1", tempUnits="Celsius" ]
+```
 
 ## Channels
 
-_Here you should provide information about available channel types, what their meaning is and how they can be used._
+Channels can be manually specified but are created automatically upon creation of the tempsensor thing. The following channels are supported:
 
-_Note that it is planned to generate some part of this based on the XML files within ```src/main/resources/OH-INF/thing``` of your binding._
+| channel       | type               | description                                          |
+|---------------|--------------------|------------------------------------------------------|
+| probe1        | Number:Temperature | This is the temperature for the first sensor         |
+| probe2        | Number:Temperature | This is the temperature for the second sensor        |
+| probe3        | Number:Temperature | This is the temperature for the third sensor         |
+| probe4        | Number:Temperature | This is the temperature for the fourth sensor        |
 
-| Channel | Type   | Read/Write | Description                 |
-|---------|--------|------------|-----------------------------|
-| control | Switch | RW         | This is the control channel |
+## Items
 
-## Full Example
-
-_Provide a full usage example based on textual configuration files._
-_*.things, *.items examples are mandatory as textual configuration is well used by many users._
-_*.sitemap examples are optional._
-
-### Thing Configuration
-
-```java
-Example thing configuration goes here.
 ```
-### Item Configuration
-
-```java
-Example item configuration goes here.
+    Number:Temperature  Sensor1_Probe1 "Temperature [%.2f %unit%]" {channel="quozltempsensor:tempsensor:sensor1:probe1"}
 ```
-
-### Sitemap Configuration
-
-```perl
-Optional Sitemap configuration goes here.
-Remove this section, if not needed.
-```
-
-## Any custom content here!
-
-_Feel free to add additional sections for whatever you think should also be mentioned about your binding!_

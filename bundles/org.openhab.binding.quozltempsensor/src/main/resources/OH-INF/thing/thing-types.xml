@@ -21,11 +21,22 @@
             <parameter name="tempUnits" type="text" required="true">
                 <limitToOptions>true</limitToOptions>
                 <label>Temperature Units</label>
-                <description>Imperial or Metric temperature units</description>
+                <description>Device reports in Imperial or Metric temperature units</description>
                 <default>Celsius</default>
                 <options>
                     <option value="Celsius">Celsius</option>
                     <option value="Fahrenheit">Fahrenheit</option>
+                </options>        
+            </parameter>
+                <parameter name="precision" type="text" required="true">
+                <limitToOptions>true</limitToOptions>
+                <label>Temperature Digits of Precision</label>
+                <description>Digits of precision to report</description>
+                <default>0</default>
+                <options>
+                    <option value="0">0</option>
+                    <option value="1">1</option>
+                    <option value="2">2</option>
                 </options>        
             </parameter>
         </config-description>

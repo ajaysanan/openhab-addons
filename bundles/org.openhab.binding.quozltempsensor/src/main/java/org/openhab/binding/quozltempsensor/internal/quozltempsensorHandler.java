@@ -14,24 +14,38 @@ package org.openhab.binding.quozltempsensor.internal;
 
 import static org.openhab.binding.quozltempsensor.internal.quozltempsensorBindingConstants.*;
 
-import java.time.*;
-import java.util.concurrent.*;
-import java.util.regex.*;
+import java.math.BigDecimal;
+import java.math.RoundingMode;
+import java.time.Duration;
+import java.time.Instant;
+import java.util.concurrent.ScheduledFuture;
+import java.util.concurrent.TimeUnit;
+import java.util.regex.Matcher;
+import java.util.regex.Pattern;
 
 import javax.measure.quantity.Temperature;
 
-import org.eclipse.jdt.annotation.*;
+import org.eclipse.jdt.annotation.NonNullByDefault;
+import org.eclipse.jdt.annotation.Nullable;
 import org.openhab.core.config.core.Configuration;
 import org.openhab.core.library.types.QuantityType;
 import org.openhab.core.library.unit.ImperialUnits;
-import org.openhab.core.thing.*;
+import org.openhab.core.thing.Channel;
+import org.openhab.core.thing.ChannelUID;
+import org.openhab.core.thing.Thing;
+import org.openhab.core.thing.ThingStatus;
+import org.openhab.core.thing.ThingStatusDetail;
 import org.openhab.core.thing.binding.BaseThingHandler;
-import org.openhab.core.thing.binding.builder.*;
+import org.openhab.core.thing.binding.builder.ChannelBuilder;
+import org.openhab.core.thing.binding.builder.ThingBuilder;
 import org.openhab.core.thing.type.ChannelTypeUID;
 import org.openhab.core.types.Command;
-import org.slf4j.*;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
-import jssc.*;
+import jssc.SerialPort;
+import jssc.SerialPortException;
+import jssc.SerialPortList;
 import tech.units.indriya.unit.Units;
 
 /**
@@ -48,13 +62,11 @@ public class quozltempsensorHandler extends BaseThingHandler {
     private static final String regexFind = "(ts\\s(?<temp>C|F))|(\\d\\s\\d+.\\d\\d)+";
     private static final String regexGroup = "(\\d\\s)|(\\d+.\\d+)";
     private static final int waitTimeMS = 5000;
-    private static final int heartbeatInterval = 1; // for testing; change to 2 when done
+    private static final int heartbeatInterval = 2;
 
-    private @Nullable quozltempsensorConfiguration config = new quozltempsensorConfiguration();
+    private quozltempsensorConfiguration config = new quozltempsensorConfiguration();
 
     private @Nullable SerialPort serialPort;
-    private @Nullable String port;
-    private @Nullable String tempUnits;
 
     private Instant lastDataReceived = Instant.now();
 
@@ -71,21 +83,16 @@ public class quozltempsensorHandler extends BaseThingHandler {
 
     @Override
     public void initialize() {
-        logger.trace("Method: initialize");
         config = getConfigAs(quozltempsensorConfiguration.class);
 
-        port = config.serialPort;
-        tempUnits = config.tempUnits;
-
+        final String port = config.serialPort;
         if (port == null) {
             updateStatus(ThingStatus.OFFLINE, ThingStatusDetail.OFFLINE.CONFIGURATION_ERROR, "Port must be set");
             return;
         }
 
         // parse ports and if the port is found, initialize the reader
-
         boolean found = false;
-        // final SerialPort[] comPorts = SerialPort.getCommPorts();
         for (String testport : SerialPortList.getPortNames()) {
             found = port.equals(testport);
         }
@@ -93,13 +100,13 @@ public class quozltempsensorHandler extends BaseThingHandler {
             updateStatus(ThingStatus.OFFLINE, ThingStatusDetail.OFFLINE.CONFIGURATION_ERROR, "Port is not known");
             return;
         }
-        connect();
+        // start the async connect task
+        scheduler.submit(this::connect);
     }
 
     private void connect() {
-        logger.trace("Method: connect");
         try {
-            final SerialPort serialPort = new SerialPort(port);
+            final SerialPort serialPort = new SerialPort(config.serialPort);
             this.serialPort = serialPort;
 
             // Port must be open first to set the parameters
@@ -120,24 +127,6 @@ public class quozltempsensorHandler extends BaseThingHandler {
         reader = scheduler.scheduleWithFixedDelay(() -> receiveAndProcess(new StringBuilder()), waitTimeMS, waitTimeMS,
                 TimeUnit.MILLISECONDS);
     }
-
-    /*
-     * @Override
-     * public void serialEvent(final @Nullable SerialPortEvent event) {
-     * if (event != null) {
-     * switch (event.getEventType()) { // probably don't need since we're not looking at any other masks
-     * case SerialPort.MASK_RXCHAR:
-     * if (readerActive.compareAndSet(false, true)) {
-     * reader = scheduler.schedule(() -> receiveAndProcess(new StringBuilder(), true), 0,
-     * TimeUnit.MILLISECONDS);
-     * }
-     * break;
-     * default:
-     * break;
-     * }
-     * }
-     * }
-     */
 
     private void disconnect() {
         final SerialPort serialPort = this.serialPort;
@@ -162,7 +151,6 @@ public class quozltempsensorHandler extends BaseThingHandler {
 
     @Override
     public void dispose() {
-        logger.trace("Method: dispose");
         disconnect();
     }
 
@@ -170,7 +158,6 @@ public class quozltempsensorHandler extends BaseThingHandler {
      * Read from the serial port and process the data
      *
      * @param sb the string builder to receive the data
-     * @param firstAttempt indicates if this is the first read attempt without waiting
      */
     private void receiveAndProcess(final StringBuilder sb) {
         final SerialPort serialPort = this.serialPort;
@@ -205,11 +192,10 @@ public class quozltempsensorHandler extends BaseThingHandler {
         Pattern pat = Pattern.compile(regexFind);
         Matcher mat = pat.matcher(result);
         while (mat.find()) {
-            // logger.trace("Data received: {}", mat.group());
             String units = mat.group("temp");
-            if (units != null && config != null) {
+            if (units != null) {
                 // Found the initial Temperature Units; update that
-                tempUnits = (units.equals("C")) ? "Celsius" : "Fahrenheit";
+                final String tempUnits = (units.equals("C")) ? "Celsius" : "Fahrenheit";
                 Configuration configuration = editConfiguration();
                 configuration.put("tempUnits", tempUnits);
                 updateConfiguration(configuration);
@@ -227,35 +213,32 @@ public class quozltempsensorHandler extends BaseThingHandler {
         Matcher mat = pat.matcher(data);
 
         int probe = Integer.parseInt((mat.find()) ? mat.group().trim() : "0");
-        float temp = Float.parseFloat((mat.find()) ? mat.group() : "0");
+        final BigDecimal temp = new BigDecimal(mat.find() ? mat.group() : "0")
+                .setScale(Integer.parseInt(config.precision == null ? "2" : config.precision), RoundingMode.HALF_UP);
 
-        // Check if channel exists otherwise create it
-        configureChannel(probe);
-        // Update channel
-        updateState(DEVICE_NUMBER_CHANNEL + String.valueOf(probe), new QuantityType<Temperature>(Float.valueOf(temp),
-                (tempUnits == "Celsius") ? Units.CELSIUS : ImperialUnits.FAHRENHEIT));
-        logger.trace("Updated {}{} to {} {}", DEVICE_NUMBER_CHANNEL, probe, temp, tempUnits);
-        lastDataReceived = Instant.now();
-    }
+        if (probe > 0 && probe < 5) {
+            // Check if channel exists otherwise create it
+            configureChannel(probe);
+            // Update channel
+            final String tempUnits = config.tempUnits;
+            if (tempUnits != null) {
+                logger.debug("Updating probe{} with data {} in units {}", probe, temp,
+                        tempUnits.equals("Celsius") ? Units.CELSIUS : ImperialUnits.FAHRENHEIT);
+                updateState(DEVICE_NUMBER_CHANNEL + String.valueOf(probe), new QuantityType<Temperature>(temp,
+                        tempUnits.equals("Celsius") ? Units.CELSIUS : ImperialUnits.FAHRENHEIT));
+                lastDataReceived = Instant.now();
+            }
 
-    @Override
-    public void handleRemoval() {
-        logger.trace("Method: handleRemoval");
-        updateStatus(ThingStatus.REMOVED);
-    }
-
-    @Override
-    public void thingUpdated(Thing thing) {
-        logger.trace("Method: thingUpdated");
+        }
     }
 
     private void configureChannel(int probe) {
-        Channel newchannel;
-        ChannelTypeUID channelTypeUID;
-        ChannelUID channelUID;
-
         final Channel channel = getThing().getChannel(DEVICE_NUMBER_CHANNEL + String.valueOf(probe));
         if (channel == null) {
+            Channel newchannel;
+            ChannelTypeUID channelTypeUID;
+            ChannelUID channelUID;
+
             logger.debug("Configuring {}{} channel for sensor", DEVICE_NUMBER_CHANNEL, probe);
             ThingBuilder thingBuilder = editThing();
             channelTypeUID = new ChannelTypeUID(BINDING_ID, "tempChannel");
