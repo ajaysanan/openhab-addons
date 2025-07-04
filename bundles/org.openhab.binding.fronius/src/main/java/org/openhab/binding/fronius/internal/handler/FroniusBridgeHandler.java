@@ -1,5 +1,5 @@
-/**
- * Copyright (c) 2010-2024 Contributors to the openHAB project
+/*
+ * Copyright (c) 2010-2025 Contributors to the openHAB project
  *
  * See the NOTICE file(s) distributed with this work for additional
  * information.
@@ -12,16 +12,20 @@
  */
 package org.openhab.binding.fronius.internal.handler;
 
+import static org.openhab.binding.fronius.internal.FroniusBindingConstants.API_TIMEOUT;
+
 import java.util.HashSet;
+import java.util.Map;
 import java.util.Set;
 import java.util.concurrent.ScheduledFuture;
 import java.util.concurrent.TimeUnit;
 
 import org.eclipse.jdt.annotation.NonNullByDefault;
 import org.eclipse.jdt.annotation.Nullable;
+import org.eclipse.jetty.http.HttpMethod;
 import org.openhab.binding.fronius.internal.FroniusBridgeConfiguration;
-import org.openhab.binding.fronius.internal.FroniusCommunicationException;
-import org.openhab.binding.fronius.internal.FroniusHttpUtil;
+import org.openhab.binding.fronius.internal.api.FroniusCommunicationException;
+import org.openhab.binding.fronius.internal.api.FroniusHttpUtil;
 import org.openhab.core.thing.Bridge;
 import org.openhab.core.thing.ChannelUID;
 import org.openhab.core.thing.Thing;
@@ -46,7 +50,6 @@ import org.slf4j.LoggerFactory;
 public class FroniusBridgeHandler extends BaseBridgeHandler {
 
     private final Logger logger = LoggerFactory.getLogger(FroniusBridgeHandler.class);
-    private static final int DEFAULT_REFRESH_PERIOD = 10;
     private final Set<FroniusBaseThingHandler> services = new HashSet<>();
     private @Nullable ScheduledFuture<?> refreshJob;
 
@@ -66,12 +69,12 @@ public class FroniusBridgeHandler extends BaseBridgeHandler {
         String errorMsg = null;
 
         String hostname = config.hostname;
-        if (hostname == null || hostname.isBlank()) {
+        if (hostname.isBlank()) {
             errorMsg = "Parameter 'hostname' is mandatory and must be configured";
             validConfig = false;
         }
 
-        if (config.refreshInterval != null && config.refreshInterval <= 0) {
+        if (config.refreshInterval <= 0) {
             errorMsg = "Parameter 'refresh' must be at least 1 second";
             validConfig = false;
         }
@@ -85,9 +88,19 @@ public class FroniusBridgeHandler extends BaseBridgeHandler {
 
     @Override
     public void dispose() {
-        if (refreshJob != null) {
-            refreshJob.cancel(true);
+        ScheduledFuture<?> localRefreshJob = refreshJob;
+        if (localRefreshJob != null) {
+            localRefreshJob.cancel(true);
             refreshJob = null;
+        }
+    }
+
+    @Override
+    public void handleConfigurationUpdate(Map<String, Object> configurationParameters) {
+        super.handleConfigurationUpdate(configurationParameters);
+
+        for (FroniusBaseThingHandler service : services) {
+            service.handleBridgeConfigurationUpdate(configurationParameters);
         }
     }
 
@@ -108,8 +121,9 @@ public class FroniusBridgeHandler extends BaseBridgeHandler {
     }
 
     private void restartAutomaticRefresh() {
-        if (refreshJob != null) { // refreshJob should be null if the config isn't valid
-            refreshJob.cancel(false);
+        ScheduledFuture<?> localRefreshJob = refreshJob;
+        if (localRefreshJob != null) { // refreshJob should be null if the config isn't valid
+            localRefreshJob.cancel(false);
             startAutomaticRefresh();
         }
     }
@@ -118,7 +132,8 @@ public class FroniusBridgeHandler extends BaseBridgeHandler {
      * Start the job refreshing the data
      */
     private void startAutomaticRefresh() {
-        if (refreshJob == null || refreshJob.isCancelled()) {
+        ScheduledFuture<?> localRefreshJob = refreshJob;
+        if (localRefreshJob == null || localRefreshJob.isCancelled()) {
             final FroniusBridgeConfiguration config = getConfigAs(FroniusBridgeConfiguration.class);
             Runnable runnable = () -> {
                 try {
@@ -134,12 +149,11 @@ public class FroniusBridgeHandler extends BaseBridgeHandler {
                 }
             };
 
-            int delay = (config.refreshInterval != null) ? config.refreshInterval.intValue() : DEFAULT_REFRESH_PERIOD;
-            refreshJob = scheduler.scheduleWithFixedDelay(runnable, 1, delay, TimeUnit.SECONDS);
+            refreshJob = scheduler.scheduleWithFixedDelay(runnable, 1, config.refreshInterval, TimeUnit.SECONDS);
         }
     }
 
     private void checkBridgeOnline(FroniusBridgeConfiguration config) throws FroniusCommunicationException {
-        FroniusHttpUtil.executeUrl("http://" + config.hostname, 5000);
+        FroniusHttpUtil.executeUrl(HttpMethod.GET, "http://" + config.hostname, API_TIMEOUT);
     }
 }

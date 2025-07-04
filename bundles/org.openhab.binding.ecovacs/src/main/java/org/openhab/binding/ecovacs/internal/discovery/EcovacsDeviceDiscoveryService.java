@@ -1,5 +1,5 @@
-/**
- * Copyright (c) 2010-2024 Contributors to the openHAB project
+/*
+ * Copyright (c) 2010-2025 Contributors to the openHAB project
  *
  * See the NOTICE file(s) distributed with this work for additional
  * information.
@@ -94,7 +94,7 @@ public class EcovacsDeviceDiscoveryService extends AbstractThingHandlerDiscovery
 
     private void scanForDevices() {
         this.api.ifPresent(api -> {
-            long timestampOfLastScan = getTimestampOfLastScan();
+            var timestampOfLastScan = getTimestampOfLastScan();
             try {
                 List<EcovacsDevice> devices = api.getDevices();
                 logger.debug("Ecovacs discovery found {} devices", devices.size());

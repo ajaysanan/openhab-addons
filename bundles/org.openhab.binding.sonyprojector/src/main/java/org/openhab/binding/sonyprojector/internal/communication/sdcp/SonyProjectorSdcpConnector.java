@@ -1,5 +1,5 @@
-/**
- * Copyright (c) 2010-2024 Contributors to the openHAB project
+/*
+ * Copyright (c) 2010-2025 Contributors to the openHAB project
  *
  * See the NOTICE file(s) distributed with this work for additional
  * information.
@@ -320,6 +320,14 @@ public class SonyProjectorSdcpConnector extends SonyProjectorConnector {
      * @throws SonyProjectorException in case of any problem
      */
     public String getMacAddress() throws SonyProjectorException {
-        return new String(getSetting(SonyProjectorItem.MAC_ADDRESS), StandardCharsets.UTF_8);
+        String macAddress = "";
+        byte[] macBytes = getSetting(SonyProjectorItem.MAC_ADDRESS);
+        for (byte macByte : macBytes) {
+            if (!macAddress.isEmpty()) {
+                macAddress = macAddress + "-";
+            }
+            macAddress = macAddress + String.format("%02x", macByte);
+        }
+        return macAddress;
     }
 }

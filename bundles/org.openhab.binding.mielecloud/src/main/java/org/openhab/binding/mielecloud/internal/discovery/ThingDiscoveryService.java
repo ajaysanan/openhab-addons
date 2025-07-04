@@ -1,5 +1,5 @@
-/**
- * Copyright (c) 2010-2024 Contributors to the openHAB project
+/*
+ * Copyright (c) 2010-2025 Contributors to the openHAB project
  *
  * See the NOTICE file(s) distributed with this work for additional
  * information.
@@ -16,6 +16,7 @@ import static org.openhab.binding.mielecloud.internal.MieleCloudBindingConstants
 import static org.openhab.binding.mielecloud.internal.handler.MieleHandlerFactory.SUPPORTED_THING_TYPES;
 
 import java.util.Map;
+import java.util.Objects;
 import java.util.Optional;
 
 import org.eclipse.jdt.annotation.NonNullByDefault;
@@ -189,7 +190,8 @@ public class ThingDiscoveryService extends AbstractThingHandlerDiscoveryService<
             return deviceName.get();
         }
 
-        return ThingInformationExtractor.getDeviceAndTechType(deviceState).orElse("Miele Device");
+        return Objects
+                .requireNonNull(ThingInformationExtractor.getDeviceAndTechType(deviceState).orElse("Miele Device"));
     }
 
     @Override

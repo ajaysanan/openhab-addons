@@ -1,5 +1,5 @@
-/**
- * Copyright (c) 2010-2024 Contributors to the openHAB project
+/*
+ * Copyright (c) 2010-2025 Contributors to the openHAB project
  *
  * See the NOTICE file(s) distributed with this work for additional
  * information.
@@ -71,7 +71,7 @@ public class ShellyDiscoveryParticipant implements MDNSDiscoveryParticipant {
 
     @Override
     public Set<ThingTypeUID> getSupportedThingTypeUIDs() {
-        return SUPPORTED_THING_TYPES_UIDS;
+        return SUPPORTED_THING_TYPES;
     }
 
     @Override
@@ -150,6 +150,6 @@ public class ShellyDiscoveryParticipant implements MDNSDiscoveryParticipant {
             logger.debug("Not a " + VENDOR + " device!");
             return null;
         }
-        return ShellyThingCreator.getThingUID(serviceName, "", "", false);
+        return ShellyThingCreator.getThingUID(serviceName);
     }
 }

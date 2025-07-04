@@ -1,5 +1,5 @@
-/**
- * Copyright (c) 2010-2024 Contributors to the openHAB project
+/*
+ * Copyright (c) 2010-2025 Contributors to the openHAB project
  *
  * See the NOTICE file(s) distributed with this work for additional
  * information.
@@ -28,8 +28,10 @@ public class SystemInfoBindingConstants {
 
     public static final String BINDING_ID = "systeminfo";
 
-    public static final ThingTypeUID THING_TYPE_COMPUTER = new ThingTypeUID(BINDING_ID, "computer");
-    public static final ThingTypeUID THING_TYPE_COMPUTER_IMPL = new ThingTypeUID(BINDING_ID, "computer-impl");
+    public static final String THING_TYPE_COMPUTER_ID = "computer";
+    public static final ThingTypeUID THING_TYPE_COMPUTER = new ThingTypeUID(BINDING_ID, THING_TYPE_COMPUTER_ID);
+    public static final ThingTypeUID THING_TYPE_COMPUTER_IMPL = new ThingTypeUID(BINDING_ID,
+            THING_TYPE_COMPUTER_ID + "-impl");
 
     // Thing properties
     /**
