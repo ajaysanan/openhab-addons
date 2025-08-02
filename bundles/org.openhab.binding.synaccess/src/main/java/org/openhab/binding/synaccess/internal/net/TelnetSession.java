@@ -165,7 +165,6 @@ public class TelnetSession implements Closeable {
                     throw (e);
                 }
                 charBuffer.notifyAll();
-
                 if (charBuffer.position() > 0) {
                     notifyInputAvailable();
                 }
@@ -190,14 +189,15 @@ public class TelnetSession implements Closeable {
 
             String bufdata = this.charBuffer.toString();
             Matcher matcher = regex.matcher(bufdata);
-            boolean found = true;
+            // boolean found = true;
 
             while (!matcher.find()) {
                 long elapsed = timeout > 0 ? (System.currentTimeMillis() - startTime) : 0;
 
                 if (timeout > 0 && elapsed >= timeout) {
-                    found = false;
-                    break;
+                    // found = false;
+                    logger.trace("Time elapsed with no match. Received:-->{}<--", bufdata);
+                    return false;
                 }
 
                 this.charBuffer.clear();
@@ -210,8 +210,10 @@ public class TelnetSession implements Closeable {
                 matcher = regex.matcher(bufdata);
             }
 
-            this.charBuffer.clear();
-            return found;
+            logger.trace("Response from device received and matched.");
+            // Clear the buffer if the item was found
+            // this.charBuffer.clear();
+            return true;
         }
     }
 

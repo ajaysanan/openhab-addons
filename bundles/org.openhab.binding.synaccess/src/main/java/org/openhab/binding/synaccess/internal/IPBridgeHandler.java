@@ -13,6 +13,7 @@
 package org.openhab.binding.synaccess.internal;
 
 import java.io.IOException;
+import java.util.Map;
 import java.util.concurrent.BlockingQueue;
 import java.util.concurrent.LinkedBlockingQueue;
 import java.util.concurrent.ScheduledFuture;
@@ -20,6 +21,7 @@ import java.util.concurrent.TimeUnit;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 
+import org.eclipse.jdt.annotation.NonNullByDefault;
 import org.eclipse.jdt.annotation.Nullable;
 import org.openhab.binding.synaccess.internal.net.TelnetSession;
 import org.openhab.binding.synaccess.internal.net.TelnetSessionListener;
@@ -39,8 +41,10 @@ import org.slf4j.LoggerFactory;
  *
  * @author Ajay Sanan - Initial contribution
  */
+@NonNullByDefault
 public class IPBridgeHandler extends BaseBridgeHandler {
-    private static final Pattern RESPONSE_REGEX = Pattern.compile("(\\$A[0-7F]|Goodbye\\!)[ ,]?([01]*)?[ ,]?([01]*)");
+    private static final Pattern RESPONSE_REGEX = Pattern.compile("(\\$A[0-7F])[ ,]?([01]*)?[ ,]?([01]*)");
+    private static final Pattern STATUS_REGEX = Pattern.compile("(Goodbye\\!|Password:|Invalid ID\\/PWD|HW).*");
 
     private static final String DEFAULT_USER = "admin";
     private static final String DEFAULT_PASSWORD = "admin";
@@ -50,19 +54,21 @@ public class IPBridgeHandler extends BaseBridgeHandler {
 
     private final Logger logger = LoggerFactory.getLogger(IPBridgeHandler.class);
 
-    private IPBridgeConfig config;
+    private IPBridgeConfig config = new IPBridgeConfig();
 
     private int reconnectInterval;
     private int heartbeatInterval;
     private int sendDelay;
 
+    private boolean authRequired;
+
     private TelnetSession session;
     private BlockingQueue<String> sendQueue = new LinkedBlockingQueue<>();
 
-    private Thread messageSender;
-    private ScheduledFuture<?> keepAlive;
-    private ScheduledFuture<?> keepAliveReconnect;
-    private ScheduledFuture<?> connectRetryJob;
+    private @Nullable Thread messageSender;
+    private @Nullable ScheduledFuture<?> keepAlive;
+    private @Nullable ScheduledFuture<?> keepAliveReconnect;
+    private @Nullable ScheduledFuture<?> connectRetryJob;
 
     protected @Nullable SynaccessDiscoveryService discoveryService;
 
@@ -92,13 +98,14 @@ public class IPBridgeHandler extends BaseBridgeHandler {
             sendDelay = (config.delay < 0) ? 0 : config.delay;
 
             updateStatus(ThingStatus.OFFLINE, ThingStatusDetail.NONE, "Connecting");
-            scheduler.submit(this::connect); // start the async connect task
+            // start the async connect task so can return quickly
+            scheduler.submit(this::connect);
         }
     }
 
     @Override
     public void handleCommand(ChannelUID channelUID, Command command) {
-
+        // No commands in the Bridge Thing
     }
 
     public void setDiscoveryService(SynaccessDiscoveryService discoveryService) {
@@ -110,7 +117,7 @@ public class IPBridgeHandler extends BaseBridgeHandler {
     }
 
     private boolean validConfiguration(IPBridgeConfig config) {
-        if (config == null) {
+        if (config.ipAddress == "") {
             updateStatus(ThingStatus.OFFLINE, ThingStatusDetail.CONFIGURATION_ERROR, "bridge configuration missing");
             return false;
         }
@@ -136,17 +143,14 @@ public class IPBridgeHandler extends BaseBridgeHandler {
 
         try {
             this.session.open(config.ipAddress, config.port);
-            if (!this.session.waitFor("User ID:", 2000)) {
+            if (!this.session.waitFor("Telnet", 2000)) {
                 updateStatus(ThingStatus.OFFLINE, ThingStatusDetail.CONFIGURATION_ERROR,
                         "connection to invalid device");
                 disconnect();
                 return;
             }
-            if (!login(config)) {
-                updateStatus(ThingStatus.OFFLINE, ThingStatusDetail.CONFIGURATION_ERROR, "invalid username/password");
-                disconnect();
-                return;
-            }
+            // There is no connection acknowledgment. Needs auth if requests User ID
+            authRequired = this.session.waitFor("User ID:", 2000);
         } catch (IOException e) {
             updateStatus(ThingStatus.OFFLINE, ThingStatusDetail.COMMUNICATION_ERROR, e.getMessage());
             disconnect();
@@ -156,17 +160,25 @@ public class IPBridgeHandler extends BaseBridgeHandler {
             Thread.currentThread().interrupt();
             updateStatus(ThingStatus.OFFLINE, ThingStatusDetail.HANDLER_INITIALIZING_ERROR, "login interrupted");
             disconnect();
+            scheduleConnectRetry(reconnectInterval); // Possibly a temporary problem. Try again later.
             return;
         }
 
-        updateStatus(ThingStatus.ONLINE);
         messageSender = new Thread(this::sendCommandsThread, "Synaccess sender");
         messageSender.start();
 
-        // sendCommand("$A5"); Don't need to do this; PDU does it if one exists otherwise will do on keepalive
+        if (authRequired) {
+            updateStatus(ThingStatus.UNKNOWN);
+            sendCommand(config.user != "" ? config.user : DEFAULT_USER);
+        } else {
+            updateStatus(ThingStatus.ONLINE);
+            sendCommand("$A5");
+        }
+
         logger.debug("Starting keepAlive job with interval {} minutes", heartbeatInterval);
         keepAlive = scheduler.scheduleWithFixedDelay(this::sendKeepAlive, heartbeatInterval, heartbeatInterval,
                 TimeUnit.MINUTES);
+
     }
 
     private void sendCommandsThread() {
@@ -182,7 +194,7 @@ public class IPBridgeHandler extends BaseBridgeHandler {
                     sendQueue.add(command); // Requeue command
 
                     reconnect();
-                    // reconnect() will start a new thread; terminate this one
+                    // reconnect() will start a new commands thread but will first disconnect to terminate this one
                     break;
                 }
                 if (sendDelay > 0) {
@@ -211,13 +223,22 @@ public class IPBridgeHandler extends BaseBridgeHandler {
             this.keepAliveReconnect.cancel(false);
         }
 
-        if (messageSender != null && messageSender.isAlive()) {
+        if (messageSender != null) {
             messageSender.interrupt();
         }
 
         try {
+            if (this.session.isConnected()) {
+                // try to log out gracefully
+                logger.debug("Attempting to log out");
+                this.session.writeLine("logout");
+                this.session.waitFor("Goodbye!", 500);
+            }
             this.session.close();
         } catch (IOException e) {
+            logger.warn("Error disconnecting: {}", e.getMessage());
+        } catch (InterruptedException e) {
+            Thread.currentThread().interrupt();
             logger.warn("Error disconnecting: {}", e.getMessage());
         }
     }
@@ -230,24 +251,11 @@ public class IPBridgeHandler extends BaseBridgeHandler {
         connect();
     }
 
-    private boolean login(IPBridgeConfig config) throws IOException, InterruptedException {
-        logger.trace("Sending command {}", config.user != null ? config.user : DEFAULT_USER);
-        this.session.writeLine(config.user != null ? config.user : DEFAULT_USER);
-        this.session.waitFor("Password:\\*", 2000);
-        logger.trace("Sending command {}", config.password != null ? config.password : DEFAULT_PASSWORD);
-        this.session.writeLine(config.password != null ? config.password : DEFAULT_PASSWORD);
-        // Synaccess responds with string of '*' equal in length to sent password whether correct or not so ignore those
-        // int length = config.password != null ? config.password.length() : DEFAULT_PASSWORD.length();
-        // this.session.waitFor("(\\*{" + length + "})", 2000);
-        // "Goodbye!" or "Invalid ID/PWD" is failure but '*' string and no further response indicates success
-        return !this.session.waitFor("Invalid ID.PWD", 2000);
-    }
-
     void sendCommand(String command) {
         this.sendQueue.add(command);
     }
 
-    private PDUHandler findThingHandler() {
+    private @Nullable PDUHandler findThingHandler() {
         for (Thing thing : getThing().getThings()) {
             if (thing.getHandler() instanceof PDUHandler) {
                 PDUHandler handler = (PDUHandler) thing.getHandler();
@@ -269,76 +277,122 @@ public class IPBridgeHandler extends BaseBridgeHandler {
 
     private void parseUpdates() {
         Thing thing = this.getThing();
-        if (thing.getStatus() != ThingStatus.ONLINE) {
+        if (thing.getStatus() != ThingStatus.ONLINE && thing.getStatus() != ThingStatus.UNKNOWN) {
             return;
         }
-        for (String line : this.session.readLines()) {
-            if (line.trim().equals("")) {
-                // Sometimes we get an empty line (possibly only when prompts are disabled). Ignore them.
+        for (String message : this.session.readLines()) {
+            // Sometimes we get an empty line (possibly only when prompts are disabled). Ignore them.
+            message = message.trim().replace(">", "");
+            if (message.equals("")) {
                 continue;
             }
-
-            logger.trace("IPBridgehandler parseUpdates: Received message: -->{}<--", line);
-
-            // System is alive, cancel reconnect task.
+            // System is connected in some way, cancel reconnect task.
             if (this.keepAliveReconnect != null) {
                 this.keepAliveReconnect.cancel(true);
             }
+            // Split into individual lines and also discard empty lines
+            String lines[] = message.split("[\\r\\n]+");
 
-            Matcher matcher = RESPONSE_REGEX.matcher(line);
-            boolean responseMatched = matcher.find();
-
-            if (!responseMatched) {
-                logger.debug("IPBridgehandler parseUpdates: Ignoring message: -->{}<--", line);
-                continue;
-            } else {
-                // We have a good response message
-                PDUHandler handler = findThingHandler();
-                if (handler != null) {
-                    try {
-                        switch (matcher.group(1)) {
-                            // case $A0 is acknowledge, sometimes with data; $A5, $A7, $A3 are echos
-                            case "$A0":
-                                // If has power data, evaluate it otherwise discard
-                                if (matcher.group(2).length() > 1) {
-                                    // Create channels if not done already
-                                    handler.configureChannels(matcher.group(2).length());
-                                    for (int i = 1; i <= matcher.group(2).length(); i++) {
-                                        handler.handleUpdate(Integer.toString(i), matcher.group(2).substring(i - 1, i));
-                                    }
-                                }
-                                break;
-                            case "$A3":
-                                if (!matcher.group(2).isEmpty() && !matcher.group(3).isEmpty()) {
-                                    handler.handleUpdate(matcher.group(2), matcher.group(3));
-                                }
-                                break;
-                            case "$A7":
-                                if (!matcher.group(2).isEmpty()) {
-                                    for (int i = 1; i <= handler.totalPorts; i++) {
-                                        handler.handleUpdate(Integer.toString(i), matcher.group(2));
-                                    }
-                                }
-                                break;
-                            case "$AF":
-                                logger.warn("Error in message", line);
-                                break;
-                            case "Goodbye!":
-                                logger.info("Disconnecting; retry in {} minutes", reconnectInterval);
+            for (String line : lines) {
+                // Check for login/logout/hardware messages then response messages
+                Matcher statusmatch = STATUS_REGEX.matcher(line);
+                if (statusmatch.find()) {
+                    logger.trace("IPBridgehandler parseUpdates: Received message: -->{}<--", line);
+                    switch (statusmatch.group(1)) {
+                        // Responds to password with string of '*' equal in length to sent password whether correct or
+                        // not. "Goodbye!" or "Invalid ID/PWD" is failure but '*' string and no further response
+                        // indicates success.
+                        case "Goodbye!":
+                            if (this.session.isConnected()) {
+                                logger.info("Disconnected; retry in {} minutes", reconnectInterval);
+                                updateStatus(ThingStatus.OFFLINE, ThingStatusDetail.NONE);
                                 this.disconnect();
                                 this.scheduleConnectRetry(reconnectInterval);
-                                break;
-                        }
-                    } catch (RuntimeException e) {
-                        logger.warn("Runtime exception while processing update: line {}: {}", line, e);
+                                return;
+                            } else {
+                                logger.info("Session disconnected");
+                            }
+                            break;
+                        case "Password:":
+                            sendCommand(config.password != "" ? config.password : DEFAULT_PASSWORD);
+                            // if invalid pwd, will disconnect quickly so need to recheck the buffer
+                            scheduler.schedule(this::parseUpdates, 500, TimeUnit.MILLISECONDS);
+                            sendCommand("$A5");
+                            break;
+                        case "Invalid ID/PWD":
+                            updateStatus(ThingStatus.OFFLINE, ThingStatusDetail.CONFIGURATION_ERROR,
+                                    "invalid username/password");
+                            disconnect();
+                            // Do not retry connection; won't work until configuration updated
+                            return;
+                        case "HW":
+                            updateProperty("firmwareVersion", line);
                     }
-                } else {
-                    if (discoveryService != null) {
-                        discoveryService.notifyDiscoveredPDU(config.ipAddress);
-                    }
+                } else if (!handleResponseMessage(line)) {
+                    logger.trace("IPBridgehandler parseUpdates: Ignoring message: -->{}<--", line);
                 }
             }
         }
+    }
+
+    private boolean handleResponseMessage(String line) {
+        Matcher responsematch = RESPONSE_REGEX.matcher(line);
+        if (responsematch.find()) {
+
+            if (thing.getStatus() != ThingStatus.ONLINE) {
+                updateStatus(ThingStatus.ONLINE);
+            }
+
+            PDUHandler handler = findThingHandler();
+            if ((handler != null)) {
+                logger.trace("IPBridgehandler parseUpdates: Received message: -->{}<--", line);
+                try {
+                    switch (responsematch.group(1)) {
+                        // case $A0 is acknowledge, sometimes with data; $A5, $A7, $A3 are echos
+                        case "$A0":
+                            // If has power data, evaluate it otherwise discard
+                            if (responsematch.group(2).length() > 1) {
+                                // Create channels if not done already
+                                handler.configureChannels(responsematch.group(2).length());
+                                for (int i = 1; i <= responsematch.group(2).length(); i++) {
+                                    handler.handleUpdate(Integer.toString(i),
+                                            responsematch.group(2).substring(i - 1, i));
+                                }
+                            }
+                            // Get the firmware version if we don't have it yet
+                            Map<String, String> props = editProperties();
+                            if (props.get("firmware_version") == null || props.get("firmware_version") == "") {
+                                sendCommand("ver");
+                            }
+                            return true;
+                        case "$A3":
+                            if (!responsematch.group(2).isEmpty() && !responsematch.group(3).isEmpty()) {
+                                handler.handleUpdate(responsematch.group(2), responsematch.group(3));
+                            }
+                            return true;
+                        case "$A7":
+                            if (!responsematch.group(2).isEmpty()) {
+                                for (int i = 1; i <= handler.totalPorts; i++) {
+                                    handler.handleUpdate(Integer.toString(i), responsematch.group(2));
+                                }
+                            }
+                            return true;
+                        case "$AF":
+                            logger.warn("Error in message", line);
+                            return true;
+                        case "$A5":
+                            return true;
+                    }
+                } catch (RuntimeException e) {
+                    logger.warn("Runtime exception while processing update: line {}: {}", line, e);
+                }
+            } else {
+                if (discoveryService != null) {
+                    discoveryService.notifyDiscoveredPDU(config.ipAddress);
+                }
+            }
+        }
+        return false;
     }
 
     private void sendKeepAlive() {
@@ -372,6 +426,7 @@ public class IPBridgeHandler extends BaseBridgeHandler {
     @Override
     public void dispose() {
         disconnect();
+        super.dispose();
     }
 
 }

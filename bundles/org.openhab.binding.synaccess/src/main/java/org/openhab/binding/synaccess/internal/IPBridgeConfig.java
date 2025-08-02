@@ -12,16 +12,19 @@
  */
 package org.openhab.binding.synaccess.internal;
 
+import org.eclipse.jdt.annotation.NonNullByDefault;
+
 /**
  * Configuration settings for an {@link org.openhab.binding.synaccess.handler.IPBridgeHandler}.
  *
  * @author Ajay Sanan - Initial contribution
  */
+@NonNullByDefault
 public class IPBridgeConfig {
-    public String ipAddress;
+    public String ipAddress = "";
     public int port;
-    public String user;
-    public String password;
+    public String user = "";
+    public String password = "";
     public int reconnect;
     public int heartbeat;
     public int delay = 0;

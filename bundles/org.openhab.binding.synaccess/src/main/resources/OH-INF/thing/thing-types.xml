@@ -9,6 +9,7 @@
         <description>Telnet IP access point to Synaccess Power Distribution Unit</description>
         <properties>
             <property name="vendor">Synaccess</property>
+            <property name="firmware_version"></property>
         </properties>
 
         <representation-property>ipAddress</representation-property>
@@ -25,6 +26,7 @@
                 <label>Port</label>
                 <description>Telnet Port</description>
                 <default>23</default>
+                <advanced>true</advanced>
             </parameter>
             <parameter name="user" type="text">
                 <label>User Name</label>
@@ -93,6 +95,7 @@
         </supported-bridge-type-refs>
         <label>Synaccess PDU</label>
         <description>Controls switched loads</description>
+        <category>PowerOutlet</category>
         <representation-property>ipAddress</representation-property>
     </thing-type>
     
