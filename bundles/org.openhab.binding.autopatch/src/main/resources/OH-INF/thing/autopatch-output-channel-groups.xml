@@ -1,0 +1,36 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<thing:thing-descriptions bindingId="autopatch"
+    xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+    xmlns:thing="https://openhab.org/schemas/thing-description/v1.0.0"
+    xsi:schemaLocation="https://openhab.org/schemas/thing-description/v1.0.0 https://openhab.org/schemas/thing-description-1.0.0.xsd">
+
+    <channel-group-type id="output-settings">
+        <label>Output Zone Settings</label>
+        <channels>
+            <channel id="volume" typeId="system.volume"/>
+            <channel id="maxvolume" typeId="system.volume"/>
+            <channel id="mute" typeId="system.mute"/>
+            <channel id="connectedinput" typeId="rwtype-connectedinput"/>
+            <channel id="reset" typeId="wotype-zonecommand"/>
+        </channels>
+    </channel-group-type>
+        
+    <channel-group-type id="dsp-settings">
+        <label>Output Zone DSP Settings</label>
+        <channels>
+            <channel id="treble" typeId="rwtype-tone"/>
+            <channel id="bass" typeId="rwtype-tone"/>
+            <channel id="balance" typeId="rwtype-balance"/>
+            <channel id="equalizer" typeId="rwtype-equalizer"/>
+        </channels>
+    </channel-group-type>
+        
+    <channel-group-type id="output-commands">
+        <label>Output Global Commands</label>
+        <channels>
+            <channel id="command" typeId="wotype-devicecommand" />
+            <channel id="createglobalpreset" typeId="wotype-globalpreset" />
+            <channel id="executeglobalpreset" typeId="wotype-globalpreset" />      
+        </channels>
+    </channel-group-type>
+</thing:thing-descriptions>

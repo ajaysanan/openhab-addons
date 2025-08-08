@@ -1,0 +1,229 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<thing:thing-descriptions bindingId="autopatch"
+	xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+	xmlns:thing="https://openhab.org/schemas/thing-description/v1.0.0"
+	xsi:schemaLocation="https://openhab.org/schemas/thing-description/v1.0.0 https://openhab.org/schemas/thing-description-1.0.0.xsd">
+
+    <bridge-type id="serialbridge">
+        <label>AMX/Autopatch Matrix Audio Switcher</label>
+              
+        <description>
+            RS232 access point to multi zone audio matrix switcher and digital signal processor.
+        </description>
+        
+        <channel-groups>
+            <channel-group typeId="output-commands" id="commands"/>
+        </channel-groups>
+        
+        <properties>
+             <property name="vendor">Autopatch/AMX</property>
+        </properties>
+        
+        <representation-property>uniqueId</representation-property>
+            
+        <config-description>
+            <parameter name="serialPort" type="text" required="true">
+                <context>serial-port</context>
+                <limitToOptions>false</limitToOptions>
+                <label>Autopatch Serial Port</label>
+                <description>
+                    The serial port name for the Autopatch switcher. Valid values
+                    are e.g. COM1 for Windows and /dev/ttyS0
+                    or /dev/ttyUSB0 for Linux.
+                </description>
+            </parameter>
+            
+            <parameter name="deviceType" type="text" required="true">
+                <limitToOptions>true</limitToOptions>
+                <label>AMX/Autopatch device</label>
+                <description>
+                    The version of the Autopatch device.
+                </description>
+                <options>
+                    <option value="epica128">Epica-128</option>
+                    <option value="epica256">Epica-256</option>                
+                    <option value="precisDSP0808">PrecisDSP 8x8</option>
+                    <option value="precisDSP1818">PrecisDSP 18x18</option>
+                </options>
+                <default>precisDSP1818</default>
+            </parameter>
+            
+            <parameter name="refreshInterval" type="integer" step="1" unit="min" min="1">
+                <label>Refresh Interval</label>
+                <description>Interval the device is polled in minutes.</description>
+                <default>60</default>
+                <advanced>true</advanced>
+            </parameter>
+        </config-description>
+         
+    </bridge-type>
+
+    <bridge-type id="ipbridge">
+        <label>AMX/Autopatch Matrix Audio Switcher</label>
+              
+        <description>
+            IP access point to multi zone audio matrix switcher and digital signal processor (via serial to TCP/IP device).
+        </description>
+        
+        <channel-groups>
+            <channel-group typeId="output-commands" id="commands"/>
+        </channel-groups>
+        
+        <properties>
+             <property name="vendor">Autopatch/AMX</property>
+        </properties>
+        
+        <representation-property>ipAddress</representation-property>
+            
+        <config-description>
+            <parameter name="ipAddress" type="text" required="true">
+                <context>network-address</context>
+                <label>IP address</label>
+                <description>
+                    The IP or host name of the serial to TCP/IP device connect to the Autopatch switcher. 
+                    For example a connected GC-100 device.
+                </description>
+                <default>192.168.1.100</default>
+            </parameter>
+            
+            <parameter name="port" type="integer" required="true">
+                <context>network-address</context>
+                <label>Port</label>
+                <description>Telnet Port</description>
+                <default>4999</default>
+            </parameter>
+            
+            <parameter name="deviceType" type="text" required="true">
+                <limitToOptions>true</limitToOptions>
+                <label>AMX/Autopatch device</label>
+                <description>
+                    The version of the Autopatch device.
+                </description>
+                <options>
+                    <option value="epica128">Epica-128</option>
+                    <option value="epica256">Epica-256</option>                
+                    <option value="precisDSP0808">PrecisDSP 8x8</option>
+                    <option value="precisDSP1818">PrecisDSP 18x18</option>
+                </options>
+                <default>precisDSP1818</default>
+            </parameter>
+            
+            <parameter name="refreshInterval" type="integer" step="1" unit="min" min="1">
+                <label>Refresh Interval</label>
+                <description>Interval the device is polled in minutes.</description>
+                <default>60</default>
+                <advanced>true</advanced>
+            </parameter>
+        </config-description>
+         
+    </bridge-type>
+
+	<thing-type id="inputzone">
+	    <supported-bridge-type-refs>
+            <bridge-type-ref id="serialbridge"/>
+            <bridge-type-ref id="ipbridge"/>
+        </supported-bridge-type-refs>
+        
+		<label>Autopatch Input Zone</label>
+		
+		<description>Input control zone for Autopatch matrix switcher</description>
+		
+        <channel-groups>
+            <channel-group typeId="input-settings" id="settings"/>
+        </channel-groups>
+        
+        <representation-property>inputNumber</representation-property>
+        
+		<config-description>
+            <parameter name="label" type="text" required="true">
+                <label>Source Label</label>
+                <description>Friendly Name for the Input Source to Be Displayed in the UI (ie: Radio, CD, etc.)</description>
+            </parameter>
+            
+            <parameter name="number" type="integer" min="1" required="true">
+                <label>Source Number</label>
+                <description>Input Zone Number</description>
+            </parameter>
+            
+            <parameter name="level" type="integer" min="0" required="true">
+                <label>Source Level</label>
+                <description>Input Zone Level</description>
+                <advanced>true</advanced>
+                <default>0</default>
+            </parameter>
+		</config-description>
+	</thing-type>
+	
+    <thing-type id="outputzone">
+        <supported-bridge-type-refs>
+            <bridge-type-ref id="serialbridge"/>
+            <bridge-type-ref id="ipbridge"/>
+        </supported-bridge-type-refs>
+        
+        <label>Autopatch Output Zone</label>
+        
+        <description>Output control zone for Autopatch matrix switcher</description>
+        
+        <channel-groups>
+            <channel-group typeId="output-settings" id="settings"/>
+            <channel-group typeId="dsp-settings" id="dspsettings"/>
+        </channel-groups>
+        
+        <representation-property>outputNumber</representation-property>
+        
+        <config-description>
+            <parameter name="label" type="text" required="true">
+                <label>Output Label</label>
+                <description>Friendly Name for the Output Zone to Be Displayed in the UI (ie: Kitchen, Living Room, etc.)</description>
+            </parameter>
+            
+            <parameter name="number" type="integer" min="1" required="true">
+                <label>Destination Number</label>
+                <description>Output Zone Number</description>
+            </parameter>
+            
+            <parameter name="level" type="integer" min="0" required="true">
+                <label>Destination Level</label>
+                <description>Output Zone Level</description>
+                <advanced>true</advanced>
+                <default>0</default>
+            </parameter>
+        </config-description>
+    </thing-type>
+
+    <thing-type id="outputzonegroup">
+        <supported-bridge-type-refs>
+            <bridge-type-ref id="serialbridge"/>
+            <bridge-type-ref id="ipbridge"/>
+        </supported-bridge-type-refs>
+        
+        <label>Autopatch Output Zone Group</label>
+        
+        <description>Output control zone for Autopatch matrix switcher</description>
+        
+        <channel-groups>
+            <channel-group typeId="output-settings" id="settings"/>
+            <channel-group typeId="dsp-settings" id="dspsettings"/>
+        </channel-groups>
+        
+        <config-description>
+            <parameter name="label" type="text" required="true">
+                <label>Output Group Label</label>
+                <description>Friendly Name for the Output Zone Group to Be Displayed in the UI (ie: Outdoor, Indoor, etc.)</description>
+            </parameter>
+            
+            <parameter name="numbers" type="text" required="true">
+                <label>Destination Numbers</label>
+                <description>Output Zone Numbers (range "x:y" or list "x y z")</description>
+            </parameter>
+            
+            <parameter name="level" type="integer" min="0" required="true">
+                <label>Destination Level</label>
+                <description>Output Zone Level</description>
+                <advanced>true</advanced>
+                <default>0</default>
+            </parameter>
+        </config-description>
+    </thing-type>
+
+</thing:thing-descriptions>
