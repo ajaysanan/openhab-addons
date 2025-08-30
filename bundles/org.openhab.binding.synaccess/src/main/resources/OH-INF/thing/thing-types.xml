@@ -8,8 +8,8 @@
         <label>Synaccess Telnet Access Point</label>
         <description>Telnet IP access point to Synaccess Power Distribution Unit</description>
         <properties>
-            <property name="vendor">Synaccess</property>
-            <property name="firmware_version"></property>
+            <property name="Vendor">Synaccess</property>
+            <property name="Firmware Version"></property>
         </properties>
 
         <representation-property>ipAddress</representation-property>

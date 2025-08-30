@@ -207,12 +207,13 @@ public class TelnetSession implements Closeable {
                 this.charBuffer.flip();
 
                 bufdata = this.charBuffer.toString();
+                // logger.trace(bufdata);
                 matcher = regex.matcher(bufdata);
             }
 
-            logger.trace("Response from device received and matched.");
-            // Clear the buffer if the item was found
-            // this.charBuffer.clear();
+            logger.trace("Response from device received and matched:-->{}<--", bufdata.strip());
+            // Reset the buffer leaving the data in case it grabbed too much
+            this.charBuffer.compact();
             return true;
         }
     }

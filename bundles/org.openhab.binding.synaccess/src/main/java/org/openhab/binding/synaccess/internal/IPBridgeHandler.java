@@ -13,6 +13,7 @@
 package org.openhab.binding.synaccess.internal;
 
 import java.io.IOException;
+import java.time.LocalDate;
 import java.util.Map;
 import java.util.concurrent.BlockingQueue;
 import java.util.concurrent.LinkedBlockingQueue;
@@ -65,10 +66,10 @@ public class IPBridgeHandler extends BaseBridgeHandler {
     private TelnetSession session;
     private BlockingQueue<String> sendQueue = new LinkedBlockingQueue<>();
 
-    private @Nullable Thread messageSender;
-    private @Nullable ScheduledFuture<?> keepAlive;
-    private @Nullable ScheduledFuture<?> keepAliveReconnect;
-    private @Nullable ScheduledFuture<?> connectRetryJob;
+    private @Nullable Thread messageSenderThread;
+    private @Nullable ScheduledFuture<?> keepaliveRecurringJob;
+    private @Nullable ScheduledFuture<?> reconnectJob;
+    private @Nullable ScheduledFuture<?> connectRetryRecurringJob;
 
     protected @Nullable SynaccessDiscoveryService discoveryService;
 
@@ -128,9 +129,20 @@ public class IPBridgeHandler extends BaseBridgeHandler {
         return true;
     }
 
-    private void scheduleConnectRetry(long waitMinutes) {
-        logger.debug("Scheduling connection retry in {} minutes", waitMinutes);
-        connectRetryJob = scheduler.schedule(this::connect, waitMinutes, TimeUnit.MINUTES);
+    private void scheduleConnectRetry(long delay, long interval) {
+        if (connectRetryRecurringJob == null) {
+            logger.debug("Scheduling connection retry job in {} minutes with interval {} minutes", delay, interval);
+            connectRetryRecurringJob = scheduler.scheduleWithFixedDelay(this::connect, delay, interval,
+                    TimeUnit.MINUTES);
+        }
+    }
+
+    private void scheduleKeepAlive(long heartbeatInterval) {
+        if (keepaliveRecurringJob == null) {
+            logger.debug("Starting keepAlive job with interval {} minutes", heartbeatInterval);
+            keepaliveRecurringJob = scheduler.scheduleWithFixedDelay(this::sendKeepAlive, heartbeatInterval,
+                    heartbeatInterval, TimeUnit.MINUTES);
+        }
     }
 
     private synchronized void connect() {
@@ -149,43 +161,59 @@ public class IPBridgeHandler extends BaseBridgeHandler {
                 disconnect();
                 return;
             }
-            // There is no connection acknowledgment. Needs auth if requests User ID
+            // The device sends no connection acknowledgment. Needs auth if requests User ID
             authRequired = this.session.waitFor("User ID:", 2000);
         } catch (IOException e) {
             updateStatus(ThingStatus.OFFLINE, ThingStatusDetail.COMMUNICATION_ERROR, e.getMessage());
             disconnect();
-            scheduleConnectRetry(reconnectInterval); // Possibly a temporary problem. Try again later.
+            scheduleConnectRetry(reconnectInterval, reconnectInterval * 5); // Possibly a temporary problem. Try again
+                                                                            // later.
             return;
         } catch (InterruptedException e) {
             Thread.currentThread().interrupt();
             updateStatus(ThingStatus.OFFLINE, ThingStatusDetail.HANDLER_INITIALIZING_ERROR, "login interrupted");
             disconnect();
-            scheduleConnectRetry(reconnectInterval); // Possibly a temporary problem. Try again later.
+            scheduleConnectRetry(reconnectInterval, reconnectInterval * 5); // Possibly a temporary problem. Try again
+                                                                            // later.
             return;
         }
 
-        messageSender = new Thread(this::sendCommandsThread, "Synaccess sender");
-        messageSender.start();
+        messageSenderThread = new Thread(this::sendCommandsThread, "Synaccess sender");
+        messageSenderThread.start();
 
         if (authRequired) {
             updateStatus(ThingStatus.UNKNOWN);
             sendCommand(config.user != "" ? config.user : DEFAULT_USER);
         } else {
-            updateStatus(ThingStatus.ONLINE);
+            connectTasks();
+        }
+    }
+
+    private void connectTasks() {
+        if (this.session.isConnected()) {
+            scheduleKeepAlive(heartbeatInterval);
+
+            if (connectRetryRecurringJob != null) {
+                connectRetryRecurringJob.cancel(true);
+            }
+
+            Map<String, String> props = this.editProperties();
+            props.putIfAbsent("Connection Date", LocalDate.now().toString());
+            String connects = props.putIfAbsent("Connection Attempts", "0");
+            if (connects != null) {
+                Integer newconn = Integer.parseInt(connects) + 1;
+                props.put("Connection Attempts", newconn.toString());
+            }
+            this.updateProperties(props);
             sendCommand("$A5");
         }
-
-        logger.debug("Starting keepAlive job with interval {} minutes", heartbeatInterval);
-        keepAlive = scheduler.scheduleWithFixedDelay(this::sendKeepAlive, heartbeatInterval, heartbeatInterval,
-                TimeUnit.MINUTES);
-
     }
 
     private void sendCommandsThread() {
         try {
             while (!Thread.currentThread().isInterrupted()) {
                 String command = sendQueue.take();
-                logger.debug("Sending command {}", command);
+                logger.trace("Sending command {}", command);
                 try {
                     session.writeLine(command.toString());
                 } catch (IOException e) {
@@ -209,22 +237,22 @@ public class IPBridgeHandler extends BaseBridgeHandler {
     private synchronized void disconnect() {
         logger.debug("Disconnecting from bridge");
 
-        if (connectRetryJob != null) {
-            connectRetryJob.cancel(true);
+        if (connectRetryRecurringJob != null) {
+            connectRetryRecurringJob.cancel(true);
         }
 
-        if (this.keepAlive != null) {
-            this.keepAlive.cancel(true);
+        if (this.keepaliveRecurringJob != null) {
+            this.keepaliveRecurringJob.cancel(true);
         }
 
-        if (this.keepAliveReconnect != null) {
+        if (this.reconnectJob != null) {
             // This method can be called from the keepAliveReconnect thread. Make sure
             // we don't interrupt ourselves, as that may prevent the reconnection attempt.
-            this.keepAliveReconnect.cancel(false);
+            this.reconnectJob.cancel(false);
         }
 
-        if (messageSender != null) {
-            messageSender.interrupt();
+        if (messageSenderThread != null) {
+            messageSenderThread.interrupt();
         }
 
         try {
@@ -244,11 +272,11 @@ public class IPBridgeHandler extends BaseBridgeHandler {
     }
 
     private synchronized void reconnect() {
-        logger.debug("Keepalive timeout, attempting to reconnect to the bridge");
+        logger.debug("Keepalive timeout or comm error, attempting to reconnect to the bridge");
 
         updateStatus(ThingStatus.OFFLINE, ThingStatusDetail.DUTY_CYCLE);
         disconnect();
-        connect();
+        this.scheduleConnectRetry(1, reconnectInterval);
     }
 
     void sendCommand(String command) {
@@ -287,8 +315,8 @@ public class IPBridgeHandler extends BaseBridgeHandler {
                 continue;
             }
             // System is connected in some way, cancel reconnect task.
-            if (this.keepAliveReconnect != null) {
-                this.keepAliveReconnect.cancel(true);
+            if (this.reconnectJob != null) {
+                this.reconnectJob.cancel(true);
             }
             // Split into individual lines and also discard empty lines
             String lines[] = message.split("[\\r\\n]+");
@@ -304,20 +332,19 @@ public class IPBridgeHandler extends BaseBridgeHandler {
                         // indicates success.
                         case "Goodbye!":
                             if (this.session.isConnected()) {
-                                logger.info("Disconnected; retry in {} minutes", reconnectInterval);
+                                logger.debug("Disconnected; retry in {} minutes", reconnectInterval);
                                 updateStatus(ThingStatus.OFFLINE, ThingStatusDetail.NONE);
-                                this.disconnect();
-                                this.scheduleConnectRetry(reconnectInterval);
+                                this.reconnect();
                                 return;
                             } else {
-                                logger.info("Session disconnected");
+                                logger.debug("Session disconnected");
                             }
                             break;
                         case "Password:":
                             sendCommand(config.password != "" ? config.password : DEFAULT_PASSWORD);
                             // if invalid pwd, will disconnect quickly so need to recheck the buffer
                             scheduler.schedule(this::parseUpdates, 500, TimeUnit.MILLISECONDS);
-                            sendCommand("$A5");
+                            scheduler.schedule(this::connectTasks, 2000, TimeUnit.MILLISECONDS);
                             break;
                         case "Invalid ID/PWD":
                             updateStatus(ThingStatus.OFFLINE, ThingStatusDetail.CONFIGURATION_ERROR,
@@ -326,7 +353,7 @@ public class IPBridgeHandler extends BaseBridgeHandler {
                             // Do not retry connection; won't work until configuration updated
                             return;
                         case "HW":
-                            updateProperty("firmwareVersion", line);
+                            updateProperty("Firmware Version", line);
                     }
                 } else if (!handleResponseMessage(line)) {
                     logger.trace("IPBridgehandler parseUpdates: Ignoring message: -->{}<--", line);
@@ -361,7 +388,7 @@ public class IPBridgeHandler extends BaseBridgeHandler {
                             }
                             // Get the firmware version if we don't have it yet
                             Map<String, String> props = editProperties();
-                            if (props.get("firmware_version") == null || props.get("firmware_version") == "") {
+                            if (props.get("Firmware Version") == null || props.get("Firmware Version") == "") {
                                 sendCommand("ver");
                             }
                             return true;
@@ -399,7 +426,7 @@ public class IPBridgeHandler extends BaseBridgeHandler {
         logger.debug("Scheduling keepalive reconnect job");
 
         // Reconnect if no response is received within 30 seconds.
-        keepAliveReconnect = scheduler.schedule(this::reconnect, KEEPALIVE_TIMEOUT_SECONDS, TimeUnit.SECONDS);
+        reconnectJob = scheduler.schedule(this::reconnect, KEEPALIVE_TIMEOUT_SECONDS, TimeUnit.SECONDS);
 
         logger.trace("Sending keepalive query");
         sendCommand("$A5");
