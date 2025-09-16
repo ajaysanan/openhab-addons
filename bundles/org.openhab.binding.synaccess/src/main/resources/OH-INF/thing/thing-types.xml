@@ -57,6 +57,10 @@
     <bridge-type id="serialbridge">
         <label>Synaccess RS232 Bridge</label>
         <description>RS232 access point to Synaccess Power Distribution Unit</description>
+		<properties>
+            <property name="Vendor">Synaccess</property>
+            <property name="Firmware Version"></property>
+        </properties>
         
         <representation-property>uniqueId</representation-property>
 

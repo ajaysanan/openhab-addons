@@ -131,7 +131,7 @@ public class IPBridgeHandler extends BaseBridgeHandler {
 
     private void scheduleConnectRetry(long delay, long interval) {
         if (connectRetryRecurringJob == null) {
-            logger.debug("Scheduling connection retry job in {} minutes with interval {} minutes", delay, interval);
+            logger.info("Scheduling connection retry job in {} minutes with interval {} minutes", delay, interval);
             connectRetryRecurringJob = scheduler.scheduleWithFixedDelay(this::connect, delay, interval,
                     TimeUnit.MINUTES);
         }
@@ -198,8 +198,9 @@ public class IPBridgeHandler extends BaseBridgeHandler {
             }
 
             Map<String, String> props = this.editProperties();
+            props.remove("firmwareVersion");
             props.putIfAbsent("Connection Date", LocalDate.now().toString());
-            String connects = props.putIfAbsent("Connection Attempts", "0");
+            String connects = props.putIfAbsent("Connection Attempts", "1");
             if (connects != null) {
                 Integer newconn = Integer.parseInt(connects) + 1;
                 props.put("Connection Attempts", newconn.toString());
@@ -235,7 +236,7 @@ public class IPBridgeHandler extends BaseBridgeHandler {
     }
 
     private synchronized void disconnect() {
-        logger.debug("Disconnecting from bridge");
+        logger.debug("Disconnecting from device");
 
         if (connectRetryRecurringJob != null) {
             connectRetryRecurringJob.cancel(true);
@@ -255,6 +256,16 @@ public class IPBridgeHandler extends BaseBridgeHandler {
             messageSenderThread.interrupt();
         }
 
+        logout();
+        try {
+            this.session.close();
+        } catch (IOException e) {
+            logger.warn("Error closing port: {}", e.getMessage());
+        }
+
+    }
+
+    private synchronized void logout() {
         try {
             if (this.session.isConnected()) {
                 // try to log out gracefully
@@ -262,9 +273,8 @@ public class IPBridgeHandler extends BaseBridgeHandler {
                 this.session.writeLine("logout");
                 this.session.waitFor("Goodbye!", 500);
             }
-            this.session.close();
         } catch (IOException e) {
-            logger.warn("Error disconnecting: {}", e.getMessage());
+            logger.debug("Error writing to port; already disconnected: {}", e.getMessage());
         } catch (InterruptedException e) {
             Thread.currentThread().interrupt();
             logger.warn("Error disconnecting: {}", e.getMessage());
@@ -272,7 +282,7 @@ public class IPBridgeHandler extends BaseBridgeHandler {
     }
 
     private synchronized void reconnect() {
-        logger.debug("Keepalive timeout or comm error, attempting to reconnect to the bridge");
+        logger.info("Keepalive timeout or comm error, attempting to reconnect to the device");
 
         updateStatus(ThingStatus.OFFLINE, ThingStatusDetail.DUTY_CYCLE);
         disconnect();
@@ -423,12 +433,11 @@ public class IPBridgeHandler extends BaseBridgeHandler {
     }
 
     private void sendKeepAlive() {
-        logger.debug("Scheduling keepalive reconnect job");
+        logger.debug("Scheduling single keepalive reconnect attempt and sending keepalive query");
 
         // Reconnect if no response is received within 30 seconds.
         reconnectJob = scheduler.schedule(this::reconnect, KEEPALIVE_TIMEOUT_SECONDS, TimeUnit.SECONDS);
 
-        logger.trace("Sending keepalive query");
         sendCommand("$A5");
     }
 
