@@ -12,6 +12,8 @@
  */
 package org.openhab.binding.synaccess.internal;
 
+import static org.openhab.binding.synaccess.internal.SynaccessBindingConstants.*;
+
 import java.io.IOException;
 import java.time.LocalDate;
 import java.util.Map;
@@ -46,12 +48,6 @@ import org.slf4j.LoggerFactory;
 public class IPBridgeHandler extends BaseBridgeHandler {
     private static final Pattern RESPONSE_REGEX = Pattern.compile("(\\$A[0-7F])[ ,]?([01]*)?[ ,]?([01]*)");
     private static final Pattern STATUS_REGEX = Pattern.compile("(Goodbye\\!|Password:|Invalid ID\\/PWD|HW).*");
-
-    private static final String DEFAULT_USER = "admin";
-    private static final String DEFAULT_PASSWORD = "admin";
-    private static final int DEFAULT_RECONNECT_MINUTES = 5;
-    private static final int DEFAULT_HEARTBEAT_MINUTES = 5;
-    private static final long KEEPALIVE_TIMEOUT_SECONDS = 30;
 
     private final Logger logger = LoggerFactory.getLogger(IPBridgeHandler.class);
 
@@ -92,7 +88,8 @@ public class IPBridgeHandler extends BaseBridgeHandler {
 
     @Override
     public void initialize() {
-        this.config = getThing().getConfiguration().as(IPBridgeConfig.class);
+        this.config = getConfigAs(IPBridgeConfig.class);
+        // this.config = getThing().getConfiguration().as(IPBridgeConfig.class);
         if (validConfiguration(this.config)) {
             reconnectInterval = (config.reconnect > 0) ? config.reconnect : DEFAULT_RECONNECT_MINUTES;
             heartbeatInterval = (config.heartbeat > 0) ? config.heartbeat : DEFAULT_HEARTBEAT_MINUTES;
@@ -104,17 +101,8 @@ public class IPBridgeHandler extends BaseBridgeHandler {
         }
     }
 
-    @Override
-    public void handleCommand(ChannelUID channelUID, Command command) {
-        // No commands in the Bridge Thing
-    }
-
     public void setDiscoveryService(SynaccessDiscoveryService discoveryService) {
         this.discoveryService = discoveryService;
-    }
-
-    public IPBridgeConfig getIPBridgeConfig() {
-        return config;
     }
 
     private boolean validConfiguration(IPBridgeConfig config) {
@@ -129,58 +117,36 @@ public class IPBridgeHandler extends BaseBridgeHandler {
         return true;
     }
 
-    private void scheduleConnectRetry(long delay, long interval) {
-        if (connectRetryRecurringJob == null) {
-            logger.info("Scheduling connection retry job in {} minutes with interval {} minutes", delay, interval);
-            connectRetryRecurringJob = scheduler.scheduleWithFixedDelay(this::connect, delay, interval,
-                    TimeUnit.MINUTES);
-        }
-    }
-
-    private void scheduleKeepAlive(long heartbeatInterval) {
-        if (keepaliveRecurringJob == null) {
-            logger.debug("Starting keepAlive job with interval {} minutes", heartbeatInterval);
-            keepaliveRecurringJob = scheduler.scheduleWithFixedDelay(this::sendKeepAlive, heartbeatInterval,
-                    heartbeatInterval, TimeUnit.MINUTES);
-        }
-    }
-
     private synchronized void connect() {
         if (this.session.isConnected()) {
+            logger.trace("Device already connected; ignoring repeat connection");
             config = getConfigAs(IPBridgeConfig.class);
             return;
         }
 
-        logger.debug("Connecting to bridge at {}", config.ipAddress);
+        logger.info("Connecting to {} at {}", thing.getUID(), config.ipAddress);
 
         try {
             this.session.open(config.ipAddress, config.port);
             if (!this.session.waitFor("Telnet", 2000)) {
-                updateStatus(ThingStatus.OFFLINE, ThingStatusDetail.CONFIGURATION_ERROR,
-                        "connection to invalid device");
-                disconnect();
+                connectError(ThingStatusDetail.CONFIGURATION_ERROR, "device not ready or connection to invalid device");
                 return;
             }
             // The device sends no connection acknowledgment. Needs auth if requests User ID
             authRequired = this.session.waitFor("User ID:", 2000);
         } catch (IOException e) {
-            updateStatus(ThingStatus.OFFLINE, ThingStatusDetail.COMMUNICATION_ERROR, e.getMessage());
-            disconnect();
-            scheduleConnectRetry(reconnectInterval, reconnectInterval * 5); // Possibly a temporary problem. Try again
-                                                                            // later.
+            connectError(ThingStatusDetail.COMMUNICATION_ERROR, e.getMessage());
             return;
         } catch (InterruptedException e) {
             Thread.currentThread().interrupt();
-            updateStatus(ThingStatus.OFFLINE, ThingStatusDetail.HANDLER_INITIALIZING_ERROR, "login interrupted");
-            disconnect();
-            scheduleConnectRetry(reconnectInterval, reconnectInterval * 5); // Possibly a temporary problem. Try again
-                                                                            // later.
+            connectError(ThingStatusDetail.HANDLER_INITIALIZING_ERROR, "login interrupted");
             return;
         }
 
         messageSenderThread = new Thread(this::sendCommandsThread, "Synaccess sender");
         messageSenderThread.start();
 
+        logger.trace("Connected (still needs authorization: {})", authRequired);
         if (authRequired) {
             updateStatus(ThingStatus.UNKNOWN);
             sendCommand(config.user != "" ? config.user : DEFAULT_USER);
@@ -189,12 +155,19 @@ public class IPBridgeHandler extends BaseBridgeHandler {
         }
     }
 
+    private void connectError(ThingStatusDetail detail, @Nullable String errMessage) {
+        updateStatus(ThingStatus.OFFLINE, detail, errMessage);
+        disconnect();
+        // Possibly a temporary problem. Try again later.
+        scheduleConnectRetry(reconnectInterval);
+    }
+
     private void connectTasks() {
         if (this.session.isConnected()) {
             scheduleKeepAlive(heartbeatInterval);
 
             if (connectRetryRecurringJob != null) {
-                connectRetryRecurringJob.cancel(true);
+                connectRetryRecurringJob.cancel(false);
             }
 
             Map<String, String> props = this.editProperties();
@@ -210,20 +183,33 @@ public class IPBridgeHandler extends BaseBridgeHandler {
         }
     }
 
+    private void scheduleConnectRetry(long delay) {
+        if (connectRetryRecurringJob != null) {
+            connectRetryRecurringJob.cancel(true);
+        }
+        logger.info("{} scheduling connection retry job in {} minutes", thing.getUID(), delay);
+        connectRetryRecurringJob = scheduler.schedule(this::connect, delay, TimeUnit.MINUTES);
+    }
+
+    private void scheduleKeepAlive(long heartbeatInterval) {
+        if (keepaliveRecurringJob != null) {
+            keepaliveRecurringJob.cancel(true);
+        }
+        logger.debug("{} starting keepAlive job with interval {} minutes", thing.getUID(), heartbeatInterval);
+        keepaliveRecurringJob = scheduler.scheduleWithFixedDelay(this::sendKeepAlive, heartbeatInterval,
+                heartbeatInterval, TimeUnit.MINUTES);
+    }
+
     private void sendCommandsThread() {
         try {
             while (!Thread.currentThread().isInterrupted()) {
                 String command = sendQueue.take();
-                logger.trace("Sending command {}", command);
+                logger.trace("{} sending command {}", thing.getUID(), command);
                 try {
                     session.writeLine(command.toString());
                 } catch (IOException e) {
-                    logger.warn("Communication error, will try to reconnect. Error: {}", e.getMessage());
-                    updateStatus(ThingStatus.OFFLINE, ThingStatusDetail.COMMUNICATION_ERROR);
                     sendQueue.add(command); // Requeue command
-
-                    reconnect();
-                    // reconnect() will start a new commands thread but will first disconnect to terminate this one
+                    connectError(ThingStatusDetail.COMMUNICATION_ERROR, e.getMessage());
                     break;
                 }
                 if (sendDelay > 0) {
@@ -236,10 +222,10 @@ public class IPBridgeHandler extends BaseBridgeHandler {
     }
 
     private synchronized void disconnect() {
-        logger.debug("Disconnecting from device");
+        logger.debug("{} disconnecting from device", thing.getUID());
 
         if (connectRetryRecurringJob != null) {
-            connectRetryRecurringJob.cancel(true);
+            connectRetryRecurringJob.cancel(false);
         }
 
         if (this.keepaliveRecurringJob != null) {
@@ -282,15 +268,18 @@ public class IPBridgeHandler extends BaseBridgeHandler {
     }
 
     private synchronized void reconnect() {
-        logger.info("Keepalive timeout or comm error, attempting to reconnect to the device");
+        logger.info("{} keepalive timeout or comm error, attempting to reconnect to the device", thing.getUID());
 
         updateStatus(ThingStatus.OFFLINE, ThingStatusDetail.DUTY_CYCLE);
         disconnect();
-        this.scheduleConnectRetry(1, reconnectInterval);
+        this.scheduleConnectRetry(1);
     }
 
     void sendCommand(String command) {
-        this.sendQueue.add(command);
+        // check for duplicates
+        if (!sendQueue.contains(command)) {
+            this.sendQueue.add(command);
+        }
     }
 
     private @Nullable PDUHandler findThingHandler() {
@@ -433,7 +422,7 @@ public class IPBridgeHandler extends BaseBridgeHandler {
     }
 
     private void sendKeepAlive() {
-        logger.debug("Scheduling single keepalive reconnect attempt and sending keepalive query");
+        logger.debug("Scheduling single " + "reconnect attempt and sending keepalive query");
 
         // Reconnect if no response is received within 30 seconds.
         reconnectJob = scheduler.schedule(this::reconnect, KEEPALIVE_TIMEOUT_SECONDS, TimeUnit.SECONDS);
@@ -463,6 +452,11 @@ public class IPBridgeHandler extends BaseBridgeHandler {
     public void dispose() {
         disconnect();
         super.dispose();
+    }
+
+    @Override
+    public void handleCommand(ChannelUID channelUID, Command command) {
+        // No commands in the Bridge Thing
     }
 
 }

@@ -29,6 +29,12 @@ public class SynaccessBindingConstants {
 
     public static final String BINDING_ID = "synaccess";
 
+    public static final String DEFAULT_USER = "admin";
+    public static final String DEFAULT_PASSWORD = "admin";
+    public static final int DEFAULT_RECONNECT_MINUTES = 5;
+    public static final int DEFAULT_HEARTBEAT_MINUTES = 5;
+    public static final long KEEPALIVE_TIMEOUT_SECONDS = 30;
+
     // List of all Bridge Type UIDs
     public static final ThingTypeUID THING_TYPE_IPBRIDGE = new ThingTypeUID(BINDING_ID, "ipbridge");
     public static final ThingTypeUID THING_TYPE_SERIALBRIDGE = new ThingTypeUID(BINDING_ID, "serialbridge");

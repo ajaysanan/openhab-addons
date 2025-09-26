@@ -15,6 +15,7 @@ package org.openhab.binding.synaccess.internal;
 import static org.openhab.binding.synaccess.internal.SynaccessBindingConstants.*;
 
 import java.math.BigDecimal;
+import java.time.Instant;
 import java.util.ArrayList;
 import java.util.List;
 
@@ -49,6 +50,7 @@ public class PDUHandler extends BaseThingHandler {
     private final Logger logger = LoggerFactory.getLogger(PDUHandler.class);
 
     public int totalPorts;
+    private long lastChannelUpdateTime = 0;
 
     public PDUHandler(Thing thing) {
         super(thing);
@@ -108,10 +110,10 @@ public class PDUHandler extends BaseThingHandler {
         // For portstatus commands handle OnOffType and RefreshType
         if (channelUID.getId().startsWith(CHANNEL_PORTSTATUS)) {
             if (command instanceof OnOffType) {
-                String outCommand = "$A3 ";
-                outCommand = outCommand.concat(channelUID.getId().substring(channelUID.getId().length() - 1));
-                outCommand = outCommand.concat(command.equals(OnOffType.ON) ? " 1" : " 0");
-                sendCommand(outCommand);
+                StringBuilder outCommand = new StringBuilder("$A3 ");
+                outCommand.append(channelUID.getId().substring(channelUID.getId().length() - 1));
+                outCommand.append(command.equals(OnOffType.ON) ? " 1" : " 0");
+                sendCommand(outCommand.toString());
             } else if (command instanceof RefreshType) {
                 sendCommand("$A5");
             } else {
@@ -169,11 +171,12 @@ public class PDUHandler extends BaseThingHandler {
 
     @Override
     public void channelLinked(ChannelUID channelUID) {
-        // Refresh state when new item is linked; don't do this since it could send multiple requests as each channel is
-        // linked.
-        // if (channelUID.getId().contains("portstatus")) {
-        // sendCommand("$A5");
-        // }
+        // Refresh state when new item is linked. Suppress multiple requests sent within 3 seconds
+        if ((Instant.now().toEpochMilli() - lastChannelUpdateTime > 3000)
+                && channelUID.getId().contains("portstatus")) {
+            lastChannelUpdateTime = Instant.now().toEpochMilli();
+            sendCommand("$A5");
+        }
     }
 
     protected @Nullable IPBridgeHandler getBridgeHandler() {
