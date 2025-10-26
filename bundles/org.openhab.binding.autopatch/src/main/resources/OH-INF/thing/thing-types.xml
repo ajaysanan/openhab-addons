@@ -16,7 +16,7 @@
         </channel-groups>
         
         <properties>
-             <property name="vendor">Autopatch/AMX</property>
+             <property name="Vendor">Autopatch/AMX</property>
         </properties>
         
         <representation-property>uniqueId</representation-property>
@@ -70,7 +70,7 @@
         </channel-groups>
         
         <properties>
-             <property name="vendor">Autopatch/AMX</property>
+             <property name="Vendor">Autopatch/AMX</property>
         </properties>
         
         <representation-property>ipAddress</representation-property>
@@ -134,12 +134,7 @@
         
         <representation-property>inputNumber</representation-property>
         
-		<config-description>
-            <parameter name="label" type="text" required="true">
-                <label>Source Label</label>
-                <description>Friendly Name for the Input Source to Be Displayed in the UI (ie: Radio, CD, etc.)</description>
-            </parameter>
-            
+		<config-description>           
             <parameter name="number" type="integer" min="1" required="true">
                 <label>Source Number</label>
                 <description>Input Zone Number</description>
@@ -171,12 +166,7 @@
         
         <representation-property>outputNumber</representation-property>
         
-        <config-description>
-            <parameter name="label" type="text" required="true">
-                <label>Output Label</label>
-                <description>Friendly Name for the Output Zone to Be Displayed in the UI (ie: Kitchen, Living Room, etc.)</description>
-            </parameter>
-            
+        <config-description>          
             <parameter name="number" type="integer" min="1" required="true">
                 <label>Destination Number</label>
                 <description>Output Zone Number</description>
@@ -199,19 +189,14 @@
         
         <label>Autopatch Output Zone Group</label>
         
-        <description>Output control zone for Autopatch matrix switcher</description>
+        <description>Output control of group of zones for Autopatch matrix switcher</description>
         
         <channel-groups>
             <channel-group typeId="output-settings" id="settings"/>
             <channel-group typeId="dsp-settings" id="dspsettings"/>
         </channel-groups>
         
-        <config-description>
-            <parameter name="label" type="text" required="true">
-                <label>Output Group Label</label>
-                <description>Friendly Name for the Output Zone Group to Be Displayed in the UI (ie: Outdoor, Indoor, etc.)</description>
-            </parameter>
-            
+        <config-description>            
             <parameter name="numbers" type="text" required="true">
                 <label>Destination Numbers</label>
                 <description>Output Zone Numbers (range "x:y" or list "x y z")</description>

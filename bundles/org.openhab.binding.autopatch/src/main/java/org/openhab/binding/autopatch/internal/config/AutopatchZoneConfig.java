@@ -10,38 +10,36 @@
  *
  * SPDX-License-Identifier: EPL-2.0
  */
-package org.openhab.binding.autopatch.internal.handler;
+package org.openhab.binding.autopatch.internal.config;
 
 import org.eclipse.jdt.annotation.NonNullByDefault;
-import org.eclipse.jdt.annotation.Nullable;
 
 /**
- * The {@link ZoneConfig} class contains fields mapping thing configuration parameters.
+ * The {@link AutopatchZoneConfig} class contains fields mapping thing configuration parameters.
  *
  * @author Ajay Sanan - Initial contribution
  */
 @NonNullByDefault
-public class ZoneConfig {
+public class AutopatchZoneConfig {
 
-    private @Nullable String label;
-    private @Nullable Integer number;
-    private @Nullable Integer level;
-
-    public String getLabel() {
-        return (label == null ? "" : label);
-    }
+    private int number;
+    private int level;
 
     public int getNumber() {
-        return (number == null ? 1 : number);
+        return number;
     }
 
     public int getLevel() {
-        return (level == null ? 0 : level);
+        return level;
     }
 
     @Override
     public String toString() {
-        return "Input Zone: " + label + " [" + String.valueOf(getNumber()) + "]";
+        return "Zone: " + " [" + String.valueOf(number) + "]";
+    }
+
+    public boolean sameZoneParameters(AutopatchZoneConfig config) {
+        return (config.level == level) && (config.number == number);
     }
 
 }

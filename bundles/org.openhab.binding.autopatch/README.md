@@ -6,6 +6,8 @@ Current fully supported devices:
 * PrecisDSP (8x8)
 * PrecisDSP (18x18)
 
+Limitations:
+
 ## Supported Things
 
 There are three thing types.
@@ -62,6 +64,8 @@ _Note that it is planned to generate some part of this based on the XML files wi
 |---------|--------|------------|-----------------------------|
 | control | Switch | RW         | This is the control channel |
 
+Input Zone: Output Zone List can set output zones but cannot remove them from the list (use Output Zone for that).  A blank list will mute the Input zone.
+
 ## Full Example
 
 _Provide a full usage example based on textual configuration files._
@@ -88,4 +92,5 @@ Remove this section, if not needed.
 
 ## Any custom content here!
 
+To execute a disconnect, change the input zone list to empty or output zone connection to 0
 _Feel free to add additional sections for whatever you think should also be mentioned about your binding!_

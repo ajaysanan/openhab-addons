@@ -12,7 +12,6 @@
  */
 package org.openhab.binding.autopatch.internal;
 
-import java.util.HashSet;
 import java.util.Set;
 
 import org.eclipse.jdt.annotation.NonNullByDefault;
@@ -44,11 +43,10 @@ public class AutopatchBindingConstants {
     // public static final ThingTypeUID THING_TYPE_AUDIOMATRIX = new ThingTypeUID(BINDING_ID, "audiomatrix");
     public static final ThingTypeUID THING_TYPE_INPUTZONE = new ThingTypeUID(BINDING_ID, "inputzone");
     public static final ThingTypeUID THING_TYPE_OUTPUTZONE = new ThingTypeUID(BINDING_ID, "outputzone");
+    public static final ThingTypeUID THING_TYPE_OUTPUTZONEGROUP = new ThingTypeUID(BINDING_ID, "outputzonegroup");
 
-    public static final Set<ThingTypeUID> SUPPORTED_THING_TYPES_UIDS = new HashSet<>();
-    public static final Set<ThingTypeUID> SUPPORTED_BRIDGE_TYPES_UIDS = new HashSet<>();
-    public static final Set<String> UPDATE_INPUT_CHANNELS = new HashSet<>();
-    public static final Set<String> UPDATE_OUTPUT_CHANNELS = new HashSet<>();
+    // public static final Set<String> UPDATE_INPUT_CHANNELS = new HashSet<>();
+    // public static final Set<String> UPDATE_OUTPUT_CHANNELS = new HashSet<>();
 
     // List of all channel groups
     public static final String CHANNEL_GROUP_NONE = "";
@@ -69,7 +67,7 @@ public class AutopatchBindingConstants {
     public static final String CHANNEL_TYPE_OUTPUTZONES = "rotype-outputzones";
 
     // List of all Channel IDs
-    // public static final String CHANNEL_GAIN = "settings#gain";
+    public static final String CHANNEL_GAIN = "settings#gain";
     public static final String CHANNEL_OUTPUTZONELIST = "settings#outputzonelist";
     public static final String CHANNEL_VOLUME = "settings#volume";
     public static final String CHANNEL_MAXVOLUME = "settings#maxvolume";
@@ -84,29 +82,36 @@ public class AutopatchBindingConstants {
     public static final String CHANNEL_CREATEGLOBALPRESET = "commands#createglobalpreset";
     public static final String CHANNEL_EXECUTEGLOBALPRESET = "commands#executeglobalpreset";
 
-    static {
-        SUPPORTED_BRIDGE_TYPES_UIDS.add(THING_TYPE_SERIALBRIDGE);
-        SUPPORTED_BRIDGE_TYPES_UIDS.add(THING_TYPE_IPBRIDGE);
-    }
+    public static final Set<ThingTypeUID> SUPPORTED_THING_TYPES_UIDS = Set.of(THING_TYPE_IPBRIDGE,
+            THING_TYPE_SERIALBRIDGE, THING_TYPE_INPUTZONE, THING_TYPE_OUTPUTZONE, THING_TYPE_OUTPUTZONEGROUP);
 
-    static {
-        // SUPPORTED_THING_TYPES_UIDS.add(THING_TYPE_AUDIOMATRIX);
-        SUPPORTED_THING_TYPES_UIDS.add(THING_TYPE_INPUTZONE);
-        SUPPORTED_THING_TYPES_UIDS.add(THING_TYPE_OUTPUTZONE);
-    }
+    public static final Set<ThingTypeUID> SUPPORTED_BRIDGE_TYPES_UIDS = Set.of(THING_TYPE_IPBRIDGE,
+            THING_TYPE_SERIALBRIDGE);
 
-    static {
-        UPDATE_INPUT_CHANNELS.add(CHANNEL_VOLUME);
-        UPDATE_INPUT_CHANNELS.add(CHANNEL_OUTPUTZONELIST);
-    }
+    public static final Set<String> UPDATE_INPUT_CHANNELS = Set.of(CHANNEL_GAIN, CHANNEL_OUTPUTZONELIST);
 
-    static {
-        UPDATE_OUTPUT_CHANNELS.add(CHANNEL_VOLUME);
-        UPDATE_OUTPUT_CHANNELS.add(CHANNEL_MUTE);
-        UPDATE_OUTPUT_CHANNELS.add(CHANNEL_CONNECTEDINPUT);
-        UPDATE_OUTPUT_CHANNELS.add(CHANNEL_TREBLE);
-        UPDATE_OUTPUT_CHANNELS.add(CHANNEL_BASS);
-        UPDATE_OUTPUT_CHANNELS.add(CHANNEL_BALANCE);
-        UPDATE_OUTPUT_CHANNELS.add(CHANNEL_EQUALIZER);
-    }
+    public static final Set<String> UPDATE_OUTPUT_CHANNELS = Set.of(CHANNEL_VOLUME, CHANNEL_MUTE,
+            CHANNEL_CONNECTEDINPUT, CHANNEL_TREBLE, CHANNEL_BASS, CHANNEL_BALANCE, CHANNEL_EQUALIZER);
+
+    public static final Set<String> DSP_CHANNELS = Set.of(CHANNEL_TREBLE, CHANNEL_BASS, CHANNEL_BALANCE,
+            CHANNEL_EQUALIZER);
+
+    /*
+     * static {
+     * UPDATE_INPUT_CHANNELS.add(CHANNEL_GAIN);
+     * UPDATE_INPUT_CHANNELS.add(CHANNEL_OUTPUTZONELIST);
+     * }
+     */
+
+    /*
+     * static {
+     * UPDATE_OUTPUT_CHANNELS.add(CHANNEL_VOLUME);
+     * UPDATE_OUTPUT_CHANNELS.add(CHANNEL_MUTE);
+     * UPDATE_OUTPUT_CHANNELS.add(CHANNEL_CONNECTEDINPUT);
+     * UPDATE_OUTPUT_CHANNELS.add(CHANNEL_TREBLE);
+     * UPDATE_OUTPUT_CHANNELS.add(CHANNEL_BASS);
+     * UPDATE_OUTPUT_CHANNELS.add(CHANNEL_BALANCE);
+     * UPDATE_OUTPUT_CHANNELS.add(CHANNEL_EQUALIZER);
+     * }
+     */
 }

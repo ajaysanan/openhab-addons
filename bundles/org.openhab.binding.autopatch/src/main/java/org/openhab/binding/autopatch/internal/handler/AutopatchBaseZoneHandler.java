@@ -12,25 +12,26 @@
  */
 package org.openhab.binding.autopatch.internal.handler;
 
-import static org.openhab.binding.autopatch.internal.AutopatchBindingConstants.*;
-
-import java.math.BigDecimal;
 import java.util.concurrent.TimeUnit;
 
 import org.eclipse.jdt.annotation.NonNullByDefault;
 import org.eclipse.jdt.annotation.Nullable;
-import org.openhab.binding.autopatch.internal.AutopatchBindingConstants.IOType;
 import org.openhab.binding.autopatch.internal.command.BCSCommand;
-import org.openhab.core.library.types.DecimalType;
-import org.openhab.core.library.types.OnOffType;
-import org.openhab.core.library.types.StringType;
+import org.openhab.binding.autopatch.internal.command.BCSConstants.CommandType;
+import org.openhab.binding.autopatch.internal.command.BCSConstants.ZoneType;
+import org.openhab.binding.autopatch.internal.command.BCSDecode;
+import org.openhab.binding.autopatch.internal.command.BCSFunctions;
+import org.openhab.binding.autopatch.internal.config.AutopatchZoneConfig;
 import org.openhab.core.thing.Bridge;
+import org.openhab.core.thing.Channel;
 import org.openhab.core.thing.ChannelUID;
 import org.openhab.core.thing.Thing;
 import org.openhab.core.thing.ThingStatus;
 import org.openhab.core.thing.ThingStatusDetail;
 import org.openhab.core.thing.ThingStatusInfo;
 import org.openhab.core.thing.binding.BaseThingHandler;
+import org.openhab.core.types.Command;
+import org.openhab.core.types.RefreshType;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -41,16 +42,18 @@ import org.slf4j.LoggerFactory;
  *
  */
 @NonNullByDefault
-public abstract class ZoneHandler extends BaseThingHandler {
+public abstract class AutopatchBaseZoneHandler extends BaseThingHandler {
 
-    private final Logger logger = LoggerFactory.getLogger(ZoneHandler.class);
+    private final Logger logger = LoggerFactory.getLogger(AutopatchBaseZoneHandler.class);
 
-    protected IOType zoneType = IOType.UNKNOWN;
-    protected int zoneNumber;
-    protected int zoneLevel;
+    private AutopatchZoneConfig configuration = new AutopatchZoneConfig();
+
+    protected ZoneType zoneType = ZoneType.UNINITIALIZED;
+    protected Integer zoneNumber = 0;
+    protected Integer zoneLevel = 0;
     protected String zoneName = "";
 
-    public ZoneHandler(Thing thing) {
+    public AutopatchBaseZoneHandler(Thing thing) {
         super(thing);
     }
 
@@ -62,20 +65,18 @@ public abstract class ZoneHandler extends BaseThingHandler {
         }
 
         updateStatus(ThingStatus.UNKNOWN, ThingStatusDetail.NOT_YET_READY);
-        ZoneConfig configuration = getConfigAs(ZoneConfig.class);
+        configuration = getConfigAs(AutopatchZoneConfig.class);
         zoneNumber = configuration.getNumber();
         zoneLevel = configuration.getLevel();
-        zoneName = configuration.getLabel();
 
-        if (!repeatedZone()) {
-            logger.debug("Initializing Autopatch input zone {}", zoneNumber);
+        if (!repeatedZone(configuration)) {
+            logger.debug("Initializing Autopatch {} zone {}:{}", zoneType.toString(), zoneNumber, zoneName);
 
             updateStatus(ThingStatus.ONLINE, ThingStatusDetail.NONE);
-            // scheduler.execute(this::refreshAllChannels);
             // Delay a bit to allow the slow serial bridge to initially connect
             scheduler.schedule(() -> refreshAllChannels(), 3000, TimeUnit.MILLISECONDS);
         } else {
-            updateStatus(ThingStatus.OFFLINE, ThingStatusDetail.CONFIGURATION_ERROR, "Zone already exists");
+            updateStatus(ThingStatus.OFFLINE, ThingStatusDetail.CONFIGURATION_ERROR, "Duplicate Zone Number");
         }
     }
 
@@ -85,34 +86,24 @@ public abstract class ZoneHandler extends BaseThingHandler {
         updateChannel(channelUID.getId().toString());
     }
 
-    protected void sendQuery(String query) {
+    protected void sendMessage(String query) {
         AutopatchBaseBridgeHandler bridgeHandler = getBridgeHandler();
         if (bridgeHandler == null) {
             updateStatus(ThingStatus.OFFLINE, ThingStatusDetail.HANDLER_MISSING_ERROR, "No bridge associated");
             return;
         }
-
         bridgeHandler.sendCommand(query);
     }
 
-    protected boolean repeatedZone() {
-        // confirm not a repeated zone number usage unless is exact same "thing"
-        // Is this necessary with representation property??
+    protected boolean repeatedZone(AutopatchZoneConfig config) {
+        // confirm not a repeated zone and level number usage
         Bridge bridge = getBridge();
-        if (bridge != null) {
-            for (Thing testthing : bridge.getThings()) {
-                if (testthing.getThingTypeUID()
-                        .equals(zoneType == IOType.INPUT ? THING_TYPE_INPUTZONE : THING_TYPE_OUTPUTZONE)
-                        && (testthing.getUID() != thing.getUID())) {
-                    BigDecimal x = new BigDecimal(
-                            testthing.getConfiguration().getProperties().getOrDefault("number", 0).toString());
-                    if (x.intValueExact() == zoneNumber) {
-                        updateStatus(ThingStatus.OFFLINE, ThingStatusDetail.CONFIGURATION_ERROR,
-                                "Duplicate Zone Number");
-                        return true;
-                    }
-                }
-            }
+        if ((bridge != null) && bridge.getThings().stream().filter(Thing::isEnabled).map(Thing::getHandler)
+                .filter(AutopatchBaseZoneHandler.class::isInstance).map(AutopatchBaseZoneHandler.class::cast)
+                .filter(handler -> !this.equals(handler) && handler.zoneType == this.zoneType)
+                .map(handler -> handler.getConfigAs(AutopatchZoneConfig.class)).map(AutopatchZoneConfig.class::cast)
+                .anyMatch(conf -> config.sameZoneParameters(conf))) {
+            return true;
         }
         return false;
     }
@@ -140,25 +131,39 @@ public abstract class ZoneHandler extends BaseThingHandler {
         }
     }
 
-    protected void handleStateChange(BCSCommand bcs) {
+    public void zoneCommand(ChannelUID channelUID, Command command) {
+        logger.debug("Handling command {} for channel {}", command, channelUID);
 
-        String channel = BCSCommand.getChannel(bcs.datatype);
-        Class<?> x = BCSCommand.getState(bcs.datatype);
-
-        if (isLinked(channel)) {
-            if (x.isInstance(DecimalType.class)) {
-                updateState(channel, new DecimalType(bcs.value / 10));
-            } else if (x.isInstance(StringType.class)) {
-                updateState(channel, new StringType(bcs.zonelist));
-            } else if (x.isInstance(OnOffType.class)) {
-                updateState(channel, bcs.muted ? OnOffType.ON : OnOffType.OFF);
+        Channel channel = getThing().getChannel(channelUID.getId());
+        String channelId = channelUID.getId();
+        CommandType commandtype = BCSCommand.getCommandType(channelId);
+        if (channel == null || commandtype == null) {
+            logger.warn("Received invalid command or invalid channel {} for device {}", channelUID,
+                    getThing().getUID());
+            return;
+        }
+        if (isLinked(channelUID)) {
+            if (command instanceof RefreshType) {
+                updateChannel(channelId);
+            } else {
+                sendMessage(BCSFunctions.buildChangeCommand(commandtype, zoneLevel, zoneNumber.toString(),
+                        command.toString()));
+                updateChannel(channelId);
             }
         }
-
     }
 
-    protected abstract void refreshAllChannels();
+    public void updateChannel(String channelId) {
+        if (isLinked(channelId)) {
+            CommandType command = BCSCommand.getCommandType(channelId);
+            if (command != null) {
+                sendMessage(BCSFunctions.buildStatusCommand(command, zoneLevel, zoneNumber.toString()));
+            }
+        }
+    }
 
-    protected abstract void updateChannel(String channel);
+    protected abstract void handleStateChange(BCSDecode bcs, int index);
+
+    protected abstract void refreshAllChannels();
 
 }

@@ -10,33 +10,25 @@
  *
  * SPDX-License-Identifier: EPL-2.0
  */
-package org.openhab.binding.autopatch.internal.handler;
+package org.openhab.binding.autopatch.internal.config;
 
 import org.eclipse.jdt.annotation.NonNullByDefault;
 import org.eclipse.jdt.annotation.Nullable;
 
 /**
- * The {@link SerialBridgeConfig} class contains fields mapping thing configuration parameters.
+ * The {@link AutopatchIPBridgeConfig} class contains fields mapping thing configuration parameters.
  *
  * @author Ajay Sanan - Initial contribution
  */
 @NonNullByDefault
-public class SerialBridgeConfig {
-
-    /**
-     * Serial port name
-     */
-    private @Nullable String serialPort;
-    private @Nullable String deviceType;
-    private @Nullable Integer refreshInterval;
-    private @Nullable Integer pollInterval;
+public class AutopatchBaseBridgeConfig {
+    protected @Nullable String deviceType;
+    protected @Nullable Integer refreshInterval;
+    protected @Nullable Integer pollInterval;
+    protected int delay = 500;
 
     private static final int DEFAULT_RECONNECT_MINUTES = 60;
     private static final int DEFAULT_POLL_SECONDS = 5;
-
-    public String getSerialPort() {
-        return (serialPort == null ? "" : serialPort);
-    }
 
     public String getDeviceType() {
         return (deviceType == null ? "PrecisDSP1818" : deviceType);
@@ -50,13 +42,7 @@ public class SerialBridgeConfig {
         return (pollInterval == null ? DEFAULT_POLL_SECONDS : pollInterval);
     }
 
-    @Override
-    public String toString() {
-        return "SerialConfiguration [serialPort=" + serialPort + "]";
-    }
-
-    public boolean sameConnectionParameters(SerialBridgeConfig config) {
-        return (serialPort == config.serialPort) && (deviceType == config.deviceType)
-                && (refreshInterval == config.refreshInterval);
+    public int getSendDelay() {
+        return delay;
     }
 }

@@ -14,23 +14,19 @@ package org.openhab.binding.autopatch.internal;
 
 import static org.openhab.binding.autopatch.internal.AutopatchBindingConstants.*;
 
-import java.util.Collections;
-import java.util.Set;
-import java.util.stream.Collectors;
-import java.util.stream.Stream;
-
 import org.eclipse.jdt.annotation.NonNullByDefault;
 import org.eclipse.jdt.annotation.Nullable;
-import org.openhab.binding.autopatch.internal.handler.IPBridgeHandler;
-import org.openhab.binding.autopatch.internal.handler.InputzoneHandler;
-import org.openhab.binding.autopatch.internal.handler.OutputzoneHandler;
-import org.openhab.binding.autopatch.internal.handler.SerialBridgeHandler;
+import org.openhab.binding.autopatch.internal.handler.AutopatchIPBridgeHandler;
+import org.openhab.binding.autopatch.internal.handler.AutopatchInputZoneHandler;
+import org.openhab.binding.autopatch.internal.handler.AutopatchOutputZoneGroupHandler;
+import org.openhab.binding.autopatch.internal.handler.AutopatchOutputZoneHandler;
+import org.openhab.binding.autopatch.internal.handler.AutopatchSerialBridgeHandler;
 import org.openhab.core.io.transport.serial.SerialPortManager;
 import org.openhab.core.net.NetworkAddressService;
 import org.openhab.core.thing.Bridge;
 import org.openhab.core.thing.Thing;
+import org.openhab.core.thing.ThingRegistry;
 import org.openhab.core.thing.ThingTypeUID;
-import org.openhab.core.thing.ThingUID;
 import org.openhab.core.thing.binding.BaseThingHandlerFactory;
 import org.openhab.core.thing.binding.BridgeHandler;
 import org.openhab.core.thing.binding.ThingHandler;
@@ -53,20 +49,17 @@ public class AutopatchHandlerFactory extends BaseThingHandlerFactory {
 
     private final Logger logger = LoggerFactory.getLogger(AutopatchHandlerFactory.class);
 
-    private static final Set<ThingTypeUID> SUPPORTED_THING_TYPES_UIDS = Collections.unmodifiableSet(
-            Stream.of(THING_TYPE_IPBRIDGE, THING_TYPE_SERIALBRIDGE, THING_TYPE_INPUTZONE, THING_TYPE_OUTPUTZONE)
-                    .collect(Collectors.toSet()));
-
     private final NetworkAddressService networkAddressService;
-
     private final SerialPortManager serialPortManager;
+    private final ThingRegistry thingRegistry;
     private @Nullable BridgeHandler bridgehandler = null;
-    private @Nullable ThingUID bridgeUID;
 
     @Activate
     public AutopatchHandlerFactory(final @Reference SerialPortManager serialPortManager,
-            final @Reference NetworkAddressService networkAddressService) {
+            final @Reference NetworkAddressService networkAddressService,
+            final @Reference ThingRegistry thingRegistry) {
         this.serialPortManager = serialPortManager;
+        this.thingRegistry = thingRegistry;
         this.networkAddressService = networkAddressService;
     }
 
@@ -80,46 +73,42 @@ public class AutopatchHandlerFactory extends BaseThingHandlerFactory {
         ThingTypeUID thingTypeUID = thing.getThingTypeUID();
 
         if (SUPPORTED_BRIDGE_TYPES_UIDS.contains(thingTypeUID)) {
-            // This binding only supports one bridge. If the user tries to add a second bridge register an error and
-            // ignore
-            if (bridgehandler != null) {
-                logger.warn("The Autopatch binding only supports one bridge. This bridge {} will be ignored.",
-                        thing.getUID().getAsString());
-                return null;
-            }
             if (THING_TYPE_SERIALBRIDGE.equals(thingTypeUID)) {
-                bridgehandler = new SerialBridgeHandler((Bridge) thing, serialPortManager);
+                bridgehandler = new AutopatchSerialBridgeHandler((Bridge) thing, serialPortManager, thingRegistry);
             } else if (THING_TYPE_IPBRIDGE.equals(thingTypeUID)) {
-                String hostaddress = networkAddressService.getPrimaryIpv4HostAddress();
-                if (hostaddress == null) {
-                    return null;
-                } else {
-                    bridgehandler = new IPBridgeHandler((Bridge) thing, hostaddress);
-                }
+                bridgehandler = new AutopatchIPBridgeHandler((Bridge) thing,
+                        networkAddressService.getPrimaryIpv4HostAddress(), thingRegistry);
             }
-            bridgeUID = thing.getUID();
             logger.debug("AutopatchHandlerFactory created BridgeHandler for {}", thingTypeUID.getAsString());
             return bridgehandler;
         } else if (SUPPORTED_THING_TYPES_UIDS.contains(thingTypeUID)) {
-            // Make sure this thing belongs to the registered Bridge
-            if (bridgeUID != null && !bridgeUID.equals(thing.getBridgeUID())) {
-                logger.warn("Thing: {} is being ignored because it does not belong to the registered bridge.",
-                        thing.getLabel());
-                return null;
+            // Warn if doesn't have a registered Bridge
+            if (thing.getBridgeUID() == null) {
+                logger.warn("Thing: {}. No bridge specified.", thing.getLabel());
             }
-            ThingHandler handler;
+            ThingHandler handler = null;
             if (THING_TYPE_INPUTZONE.equals(thingTypeUID)) {
-                handler = new InputzoneHandler(thing);
+                handler = new AutopatchInputZoneHandler(thing);
             } else if (THING_TYPE_OUTPUTZONE.equals(thingTypeUID)) {
-                handler = new OutputzoneHandler(thing);
-                logger.debug("AutopatchHandlerFactory created ThingHandler for {}", thing.getUID().getAsString());
-                return handler;
+                handler = new AutopatchOutputZoneHandler(thing);
+            } else if (THING_TYPE_OUTPUTZONEGROUP.equals(thingTypeUID)) {
+                handler = new AutopatchOutputZoneGroupHandler(thing);
             }
+            logger.debug("AutopatchHandlerFactory created ThingHandler for {}", thing.getUID().getAsString());
+            return handler;
 
         } else {
             logger.warn("Unsupported Thing-Type: {}", thingTypeUID.getAsString());
         }
 
         return null;
+    }
+
+    @Override
+    protected void removeHandler(ThingHandler thingHandler) {
+        if (thingHandler.equals(bridgehandler)) {
+            bridgehandler = null;
+        }
+        super.removeHandler(thingHandler);
     }
 }

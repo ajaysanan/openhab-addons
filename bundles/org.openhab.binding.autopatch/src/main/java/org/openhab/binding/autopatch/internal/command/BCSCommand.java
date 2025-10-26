@@ -13,21 +13,20 @@
 package org.openhab.binding.autopatch.internal.command;
 
 import static org.openhab.binding.autopatch.internal.AutopatchBindingConstants.*;
+import static org.openhab.binding.autopatch.internal.command.BCSConstants.*;
 
 import java.util.EnumMap;
+import java.util.Map;
 import java.util.Map.Entry;
-import java.util.regex.Matcher;
-import java.util.regex.Pattern;
 
 import org.eclipse.jdt.annotation.NonNullByDefault;
 import org.eclipse.jdt.annotation.Nullable;
-import org.openhab.binding.autopatch.internal.AutopatchBindingConstants.IOType;
+import org.openhab.binding.autopatch.internal.command.BCSConstants.CommandType;
+import org.openhab.binding.autopatch.internal.command.BCSConstants.ZoneType;
 import org.openhab.core.library.types.DecimalType;
 import org.openhab.core.library.types.OnOffType;
+import org.openhab.core.library.types.PercentType;
 import org.openhab.core.library.types.StringType;
-import org.openhab.core.types.State;
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
 
 /**
  * The {@link BCSCommand} class builds Autopatch BCS commands.
@@ -35,242 +34,132 @@ import org.slf4j.LoggerFactory;
  * @author Ajay Sanan - Initial contribution
  */
 @NonNullByDefault
-public class BCSCommand {
+public final class BCSCommand {
 
-    public enum Datatype {
-        VOLUMES("V"),
-        MUTE("M"),
-        UNMUTE("U"),
-        EQUALIZER("E"),
-        BALANCE("P"),
-        BASS("F1"),
-        MIDRANGE("F2"),
-        TREBLE("F3"),
-        INPUTSWITCH("S"),
-        OUTPUTSWITCH("S"),
-        UNKNOWN("");
+    /*
+     * CommandName
+     * ZoneType (I or O)
+     * XX CommandCode (C, S, or D) dynamically set
+     * XX Level and Level Number is always entered
+     * XX ZoneCode and Zone(s) (Input or Output) are always entered
+     * ResponseCode (if S)
+     * SubcommandCode (if C)
+     * RequiresSubzones in Response or Subcommand (bool) (true only for EQ)
+     * RequiresDSPCommand (bool) (true for tone and EQ)
+     * Channel
+     * Data type
+     *
+     *
+     * ?? AllowMultipleZones
+     *
+     * Volume, Output, "VA", "V", false, false, CHANNEL_VOLUME, PercentType
+     * Gain, Input, "VA", "V", false, false, CHANNEL_VOLUME, DecimalType
+     * MuteZone, Output, "VM", "", "", false, false, null
+     * XX UnmuteZone, Output, "VU", "", "", false, false, null
+     * InputSwitch, Input, "O", "", false, false, CHANNEL_OUTPUTZONELIST, StringType
+     * OutputSwitch, Output, "I", "", false, false, CHANNEL_CONNECTEDINPUT, DecimalType
+     * Bass, Output, "F1", "F1", false, true, CHANNEL_BASS, DecimalType
+     * Treble, Output, "F3", "F3", false, true, CHANNEL_TREBLE, DecimalType
+     * Balance, Output, "P", "P", false, false, CHANNEL_BALANCE, DecimalType
+     * Equalizer, Output, "E", "E", true, true, CHANNEL_EQUALIZER, StringType
+     *
+     * Special case for Volume Response with muted zone: M
+     */
 
-        private @Nullable String datatype;
-
-        private Datatype(final @Nullable String name) {
-            datatype = name;
-        }
-
-        @Override
-        public String toString() {
-            return (datatype == null ? "" : datatype);
-        }
-
-        public static Datatype getDatatype(String code) {
-            for (Datatype e : Datatype.values()) {
-                if (e.datatype != null && e.datatype.equals(code)) {
-                    return e;
-                }
-            }
-            return Datatype.UNKNOWN;
-        }
+    private static final EnumMap<CommandType, CommandList<?>> BCSMap = new EnumMap<>(CommandType.class);
+    static {
+        BCSMap.put(CommandType.VOLUME, new CommandList<PercentType>(ZoneType.OUTPUT, VOLUME_ABSOLUTE, STATUS_VOLUME,
+                false, false, CHANNEL_VOLUME, PercentType.class));
+        BCSMap.put(CommandType.GAIN, new CommandList<DecimalType>(ZoneType.INPUT, VOLUME_ABSOLUTE, STATUS_VOLUME, false,
+                false, CHANNEL_GAIN, DecimalType.class));
+        BCSMap.put(CommandType.MUTEZONE, new CommandList<OnOffType>(ZoneType.OUTPUT, VOLUME_MUTE, STATUS_VOLUME, false,
+                false, CHANNEL_MUTE, OnOffType.class));
+        BCSMap.put(CommandType.INPUTSWITCH, new CommandList<StringType>(ZoneType.INPUT, ZONE_OUTPUT, "", false, false,
+                CHANNEL_OUTPUTZONELIST, StringType.class));
+        BCSMap.put(CommandType.OUTPUTSWITCH, new CommandList<DecimalType>(ZoneType.OUTPUT, ZONE_INPUT, "", false, false,
+                CHANNEL_CONNECTEDINPUT, DecimalType.class));
+        BCSMap.put(CommandType.BASS, new CommandList<DecimalType>(ZoneType.OUTPUT, BASS, BASS, false, true,
+                CHANNEL_BASS, DecimalType.class));
+        BCSMap.put(CommandType.TREBLE, new CommandList<DecimalType>(ZoneType.OUTPUT, TREBLE, TREBLE, false, true,
+                CHANNEL_TREBLE, DecimalType.class));
+        BCSMap.put(CommandType.BALANCE, new CommandList<DecimalType>(ZoneType.OUTPUT, BALANCE, BALANCE, false, false,
+                CHANNEL_BALANCE, DecimalType.class));
+        BCSMap.put(CommandType.EQUALIZER, new CommandList<StringType>(ZoneType.OUTPUT, EQUALIZER, EQUALIZER, true, true,
+                CHANNEL_EQUALIZER, StringType.class));
     }
 
     private static class CommandList<T> {
         // private String command;
-        public String channel;
+        private ZoneType zoneType;
+        private String subcommandCode;
+        private String responseCode;
+        private String channelId;
+        private Boolean requiresSubzones;
+        private Boolean requiresDSPCommand;
         private Class<T> state;
 
-        CommandList(String channel, Class<T> state) {
-            // this.command = command;
-            this.channel = channel;
+        CommandList(ZoneType zoneType, String subcommandCode, String responseCode, Boolean requiresSubzones,
+                Boolean requiresDSPCommand, String channelId, Class<T> state) {
+            this.zoneType = zoneType;
+            this.subcommandCode = subcommandCode;
+            this.responseCode = responseCode;
+            this.requiresSubzones = requiresSubzones;
+            this.requiresDSPCommand = requiresDSPCommand;
+            this.channelId = channelId;
             this.state = state;
         }
 
     }
 
-    private final Logger logger = LoggerFactory.getLogger(BCSCommand.class);
+    public static CommandType getCommandType(@Nullable String code, ZoneType type) {
+        // if code is null, means a switch type with no subcommandCode; assign opposite zone subcommand code
+        String revisedCode = (code == null) ? (type == ZoneType.INPUT ? ZONE_OUTPUT : ZONE_INPUT) : code;
 
-    // Pattern for return messages
-    // Group 1 looks for error codes anywhere in the response to ignore it
-    // Group 2 looks for the level, optionally
-    // Group 3 looks for the zone, zones or range, required
-    // Group 4 is the volume/eq/tone response type (or empty if is a switch)
-    // Group 5 is the zones associated ONLY with the eq response type
-    // Group 6 is the return value (or values if a range was requested)
-    private static final Pattern RESPONSE_REGEX = Pattern
-            .compile("([\\?XW])|S(L[0-9]+)?([IO][0-9:\\s]+)(V|P|F[0-3]|E)?([0-9:\\\\s]+)?.*\\(([0-9-M\\s]+)");
-
-    private final static String LEVEL = "L";
-    private final static String INPUTZONE = "I";
-    private final static String OUTPUTZONE = "O";
-
-    private final static String ABSOLUTE_VOLUME = "VA";
-    /*
-     * The following are not used/implemented
-     * private final static String RELATIVE_VOLUME = "VR";
-     * private final static String VOLUME_UP = "VS+";
-     * private final static String VOLUME_DOWN = "VS-";
-     */
-
-    private final static String VOLUME = "V";
-    private final static String VOLUME_MUTE = "VM";
-    private final static String VOLUME_UNMUTE = "VU";
-
-    private final static String GAIN = "G";
-
-    private final static String EXECUTE = "T";
-    private final static String EXECUTE_GLOBAL_PRESET = "R";
-    private final static String DEFINE_GLOBAL_PRESET = "RR";
-    private final static String COMMAND_CHANGE = "C";
-    private final static String COMMAND_DISCONNECT = "D";
-    private final static String COMMAND_STATUS = "S";
-
-    public IOType iotype = IOType.UNKNOWN;
-    public Datatype datatype = Datatype.UNKNOWN;
-
-    // public HashMap<Integer, Integer> eqvalues = new HashMap<>();
-    public String eqlist = "";
-    public int zone;
-    public int value;
-    public String zonelist = "";
-    public boolean muted = false;
-    public int level = 0;
-
-    private static final EnumMap<Datatype, CommandList<?>> channelMap = new EnumMap<>(Datatype.class);
-    static {
-        channelMap.put(Datatype.VOLUMES, new CommandList<DecimalType>(CHANNEL_VOLUME, DecimalType.class));
-        channelMap.put(Datatype.MUTE, new CommandList<OnOffType>(CHANNEL_MUTE, OnOffType.class));
-        channelMap.put(Datatype.UNMUTE, new CommandList<OnOffType>(CHANNEL_MUTE, OnOffType.class));
-        channelMap.put(Datatype.INPUTSWITCH, new CommandList<StringType>(CHANNEL_OUTPUTZONELIST, StringType.class));
-        channelMap.put(Datatype.OUTPUTSWITCH, new CommandList<DecimalType>(CHANNEL_CONNECTEDINPUT, DecimalType.class));
-        channelMap.put(Datatype.TREBLE, new CommandList<DecimalType>(CHANNEL_TREBLE, DecimalType.class));
-        channelMap.put(Datatype.BASS, new CommandList<DecimalType>(CHANNEL_BASS, DecimalType.class));
-        channelMap.put(Datatype.BALANCE, new CommandList<DecimalType>(CHANNEL_BALANCE, DecimalType.class));
-        channelMap.put(Datatype.EQUALIZER, new CommandList<StringType>(CHANNEL_EQUALIZER, StringType.class));
-    }
-
-    public BCSCommand() {
-
-    }
-
-    // Verification of only one input or output zone is allowed at a time
-    public boolean decodeCommand(String command) {
-        // decipher a received command
-        Matcher matcher = RESPONSE_REGEX.matcher(command.toUpperCase().trim());
-        boolean responseMatched = matcher.find();
-
-        // Must have a group 3 and 6 match and no group 1 match
-        if (!responseMatched || (matcher.group(1) != null) || (matcher.group(3) == null)
-                || (matcher.group(6) == null)) {
-            return false;
-        }
-        if (matcher.group(3).isEmpty() || matcher.group(6).isEmpty()) {
-            return false;
-        }
-        try {
-            // Get the level, if there is one; for now are ignoring this
-            if (matcher.group(2) != null && !matcher.group(2).isEmpty()) {
-                level = Integer.parseInt(matcher.group(2).replace(LEVEL, ""));
-            }
-
-            // Get the zone being addressed
-            iotype = (matcher.group(3).contains(INPUTZONE)) ? IOType.INPUT : IOType.OUTPUT;
-            zone = Integer.parseInt(matcher.group(3).replaceAll("[^0-9]", "").trim());
-
-            // Set the return type
-            datatype = Datatype.getDatatype(matcher.group(4) == null ? "S" : matcher.group(4));
-
-            // Get the value(s)
-            if (datatype == Datatype.EQUALIZER) {
-                // for Equalizer, always read all values
-                /*
-                 * int[] bands = new int[0];
-                 * int[] values = new int[0];
-                 * bands = matcher.group(5).contains(":") ? getListRange(matcher.group(5)) : getList(matcher.group(5));
-                 *
-                 * values = getList(matcher.group(6));
-                 * for (int i = 0; i < bands.length; i++) {
-                 * eqvalues.put(bands[i], values[i]);
-                 * }
-                 * return (values.length == bands.length);
-                 */
-                return true;
-            } else if (datatype == Datatype.INPUTSWITCH && iotype == IOType.INPUT) {
-                zonelist = matcher.group(6);
-                return true;
-            } else {
-                if (matcher.group(6).contains("M")) {
-                    muted = true;
-                } else {
-                    value = Integer.parseInt(matcher.group(6).trim());
-                }
-                return true;
-            }
-
-        } catch (RuntimeException e) {
-            logger.warn("Runtime exception while processing update: line {}: {}", command, e);
-            return false;
-        }
-    }
-
-    private int[] getList(String list) {
-        String[] getlist = list.replaceAll("[^0-9]", "").trim().split("\\s");
-        int[] intlist = { 0 };
-        for (int i = 0; i < getlist.length; i++) {
-            intlist[i] = Integer.parseInt(getlist[i]);
-        }
-        return intlist;
-    }
-
-    private int[] getListRange(String list) {
-        String[] getlist = list.replaceAll("[^0-9]", "").trim().split(":");
-        int[] intlist = { 0 };
-        for (int i = 0; i < Integer.parseInt(getlist[1]); i++) {
-            intlist[i] = Integer.parseInt(getlist[0] + i);
-        }
-        return intlist;
-    }
-
-    // Build command for Verifying the status of one type from one or more zones
-    public static String buildCommand(Datatype datatype, IOType iotype, int level, String zonelist) {
-        StringBuilder command = new StringBuilder(COMMAND_STATUS + LEVEL);
-        command.append(level).append(iotype.equals(IOType.INPUT) ? INPUTZONE : OUTPUTZONE).append(zonelist);
-        if (datatype != Datatype.INPUTSWITCH) {
-            command.append(datatype);
-        }
-        command.append(EXECUTE);
-        return command.toString();
-    }
-
-    // Build command for Setting one or more values
-    public static String buildCommand(Datatype datatype, IOType iotype, int level, String zonelist, String value) {
-        StringBuilder command = new StringBuilder(COMMAND_CHANGE + LEVEL);
-        command.append(level).append(iotype.equals(IOType.INPUT) ? INPUTZONE : OUTPUTZONE).append(zonelist);
-        if (datatype == Datatype.VOLUMES) {
-            command.append(ABSOLUTE_VOLUME).append(Float.parseFloat(value) * 10);
-        }
-        command.append(EXECUTE);
-        return command.toString();
-    }
-
-    public static String getChannel(Datatype datatype) {
-        return channelMap.get(datatype).channel;
-    }
-
-    public static State getState(String channel) {
-        return new DecimalType(1);
-    }
-
-    public static <T> Class<?> getState(Datatype datatype) {
-        // Class <?> x = channelMap.get(datatype).state;
-
-        return channelMap.get(datatype).state;
-
-    }
-
-    public static Datatype getDatatype(String channel) {
-        for (Entry<Datatype, CommandList<?>> entry : channelMap.entrySet()) {
-            if (entry.getValue().channel.equals(channel)) {
+        for (Map.Entry<CommandType, CommandList<?>> entry : BCSMap.entrySet()) {
+            if ((entry.getValue().responseCode.equals(revisedCode)
+                    || entry.getValue().subcommandCode.equals(revisedCode)) && entry.getValue().zoneType == type) {
                 return entry.getKey();
             }
         }
-        return Datatype.UNKNOWN;
+        return CommandType.ERROR;
+    }
+
+    public static @Nullable CommandType getCommandType(String channel) {
+        return BCSMap.entrySet().stream().filter(entry -> entry.getValue().channelId.equals(channel)).map(Entry::getKey)
+                .findFirst().orElse(null);
+    }
+
+    public static String getChannelId(CommandType command) {
+        return BCSMap.get(command).channelId;
+    }
+
+    public static <T> Class<?> getState(CommandType command) {
+        return BCSMap.get(command).state;
+    }
+
+    public static @Nullable <T> Class<?> getState(String channel) {
+        return BCSMap.entrySet().stream().filter(entry -> entry.getValue().channelId.equals(channel))
+                .map(entry -> entry.getValue().state).findFirst().orElse(null);
+    }
+
+    public static String getResponseCode(CommandType command) {
+        return BCSMap.get(command).responseCode;
+    }
+
+    public static String getCommandCode(CommandType command) {
+        return BCSMap.get(command).subcommandCode;
+    }
+
+    public static Boolean requiresSubzones(CommandType command) {
+        return BCSMap.get(command).requiresSubzones;
+    }
+
+    public static Boolean requiresDSPCommand(CommandType command) {
+        return BCSMap.get(command).requiresDSPCommand;
+    }
+
+    public static ZoneType getZoneType(CommandType command) {
+        return BCSMap.get(command).zoneType;
     }
 
 }

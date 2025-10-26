@@ -7,7 +7,7 @@
     <channel-group-type id="input-settings">
         <label>Input Zone Settings</label>
         <channels>
-            <channel id="volume" typeId="rwtype-gain"/>
+            <channel id="gain" typeId="rwtype-gain"/>
             <channel id="outputzonelist" typeId="rotype-outputzones" />     
         </channels>
     </channel-group-type>
