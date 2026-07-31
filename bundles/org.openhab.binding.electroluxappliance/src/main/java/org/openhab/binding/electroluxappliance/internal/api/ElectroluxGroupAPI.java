@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2010-2025 Contributors to the openHAB project
+ * Copyright (c) 2010-2026 Contributors to the openHAB project
  *
  * See the NOTICE file(s) distributed with this work for additional
  * information.
@@ -14,6 +14,7 @@ package org.openhab.binding.electroluxappliance.internal.api;
 
 import java.time.Instant;
 import java.util.Map;
+import java.util.Objects;
 import java.util.concurrent.ExecutionException;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.TimeoutException;
@@ -21,7 +22,9 @@ import java.util.concurrent.TimeoutException;
 import javax.ws.rs.core.MediaType;
 
 import org.eclipse.jdt.annotation.NonNullByDefault;
+import org.eclipse.jdt.annotation.Nullable;
 import org.eclipse.jetty.client.HttpClient;
+import org.eclipse.jetty.client.HttpResponseException;
 import org.eclipse.jetty.client.api.ContentResponse;
 import org.eclipse.jetty.client.api.Request;
 import org.eclipse.jetty.client.util.StringContentProvider;
@@ -34,8 +37,14 @@ import org.openhab.binding.electroluxappliance.internal.dto.AirPurifierStateDTO;
 import org.openhab.binding.electroluxappliance.internal.dto.ApplianceDTO;
 import org.openhab.binding.electroluxappliance.internal.dto.ApplianceInfoDTO;
 import org.openhab.binding.electroluxappliance.internal.dto.ApplianceStateDTO;
+import org.openhab.binding.electroluxappliance.internal.dto.PortableAirConditionerStateDTO;
 import org.openhab.binding.electroluxappliance.internal.dto.WashingMachineStateDTO;
 import org.openhab.binding.electroluxappliance.internal.listener.TokenUpdateListener;
+import org.openhab.core.i18n.LocaleProvider;
+import org.openhab.core.i18n.TranslationProvider;
+import org.osgi.framework.Bundle;
+import org.osgi.framework.FrameworkUtil;
+import org.osgi.service.component.annotations.Reference;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -64,15 +73,29 @@ public class ElectroluxGroupAPI {
     private final HttpClient httpClient;
     private final ElectroluxApplianceBridgeConfiguration configuration;
     private String accessToken = "";
-    private Instant tokenExpiry = Instant.MAX;
+    // Force a token refresh on the first API call after startup, so the (possibly rotated) refresh token is validated
+    // with a clean token request instead of relying on an empty-Bearer request that returns 401.
+    private Instant tokenExpiry = Instant.MIN;
     private final TokenUpdateListener tokenUpdateListener;
+    private final TranslationProvider translationProvider;
+    private final LocaleProvider localeProvider;
+    private final Bundle bundle;
 
     public ElectroluxGroupAPI(ElectroluxApplianceBridgeConfiguration configuration, Gson gson, HttpClient httpClient,
-            TokenUpdateListener listener) {
+            TokenUpdateListener listener, @Reference TranslationProvider translationProvider,
+            @Reference LocaleProvider localeProvider) {
         this.gson = gson;
         this.configuration = configuration;
         this.httpClient = httpClient;
         this.tokenUpdateListener = listener;
+        this.translationProvider = translationProvider;
+        this.localeProvider = localeProvider;
+        this.bundle = FrameworkUtil.getBundle(getClass());
+    }
+
+    private String getLocalizedText(String key, @Nullable Object @Nullable... arguments) {
+        String result = translationProvider.getText(bundle, key, key, localeProvider.getLocale(), arguments);
+        return Objects.nonNull(result) ? result : key;
     }
 
     public boolean refresh(Map<String, ApplianceDTO> electroluxApplianceThings, boolean isCommunicationError) {
@@ -83,7 +106,6 @@ public class ElectroluxGroupAPI {
                 refreshToken();
             } else {
                 logger.debug("Now: {} Token expiry: {}", Instant.now(), this.tokenExpiry);
-
             }
             // Get all appliances
             String json = getAppliances();
@@ -93,6 +115,7 @@ public class ElectroluxGroupAPI {
                     String applianceId = dto.getApplianceId();
                     // Get appliance info
                     String jsonApplianceInfo = getApplianceInfo(applianceId);
+                    Instant retrievalTs = Instant.now();
                     ApplianceInfoDTO applianceInfo = gson.fromJson(jsonApplianceInfo, ApplianceInfoDTO.class);
                     if (applianceInfo != null) {
                         dto.setApplianceInfo(applianceInfo);
@@ -102,7 +125,7 @@ public class ElectroluxGroupAPI {
                             ApplianceStateDTO applianceState = gson.fromJson(jsonApplianceState,
                                     AirPurifierStateDTO.class);
                             if (applianceState != null) {
-                                dto.setApplianceState(applianceState);
+                                dto.setApplianceState(applianceState, retrievalTs);
                             }
                             electroluxApplianceThings.put(applianceInfo.getApplianceInfo().getSerialNumber(), dto);
                         } else if ("WASHING_MACHINE".equals(applianceInfo.getApplianceInfo().getDeviceType())) {
@@ -111,7 +134,16 @@ public class ElectroluxGroupAPI {
                             ApplianceStateDTO applianceState = gson.fromJson(jsonApplianceState,
                                     WashingMachineStateDTO.class);
                             if (applianceState != null) {
-                                dto.setApplianceState(applianceState);
+                                dto.setApplianceState(applianceState, retrievalTs);
+                            }
+                            electroluxApplianceThings.put(applianceInfo.getApplianceInfo().getSerialNumber(), dto);
+                        } else if ("PORTABLE_AIR_CONDITIONER"
+                                .equals(applianceInfo.getApplianceInfo().getDeviceType())) {
+                            String jsonApplianceState = getApplianceState(applianceId);
+                            ApplianceStateDTO applianceState = gson.fromJson(jsonApplianceState,
+                                    PortableAirConditionerStateDTO.class);
+                            if (applianceState != null) {
+                                dto.setApplianceState(applianceState, retrievalTs);
                             }
                             electroluxApplianceThings.put(applianceInfo.getApplianceInfo().getSerialNumber(), dto);
                         }
@@ -120,7 +152,7 @@ public class ElectroluxGroupAPI {
                 return true;
             }
         } catch (JsonSyntaxException | ElectroluxApplianceException e) {
-            logger.warn("Failed to refresh! {}", e.getMessage());
+            logger.warn("{}", getLocalizedText("error.electroluxappliance.api.failed-to-refresh", e.getMessage()));
         }
         return false;
     }
@@ -130,7 +162,8 @@ public class ElectroluxGroupAPI {
         try {
             return sendCommand(commandJSON, applianceId);
         } catch (ElectroluxApplianceException e) {
-            logger.warn("Work mode powerOff failed {}", e.getMessage());
+            logger.warn("{}",
+                    getLocalizedText("warning.electroluxappliance.work-mode-poweroff-failed", e.getMessage()));
         }
         return false;
     }
@@ -140,7 +173,7 @@ public class ElectroluxGroupAPI {
         try {
             return sendCommand(commandJSON, applianceId);
         } catch (ElectroluxApplianceException e) {
-            logger.warn("Work mode auto failed {}", e.getMessage());
+            logger.warn("{}", getLocalizedText("warning.electroluxappliance.work-mode-auto-failed", e.getMessage()));
         }
         return false;
     }
@@ -150,7 +183,7 @@ public class ElectroluxGroupAPI {
         try {
             return sendCommand(commandJSON, applianceId);
         } catch (ElectroluxApplianceException e) {
-            logger.warn("Work mode manual failed {}", e.getMessage());
+            logger.warn("{}", getLocalizedText("warning.electroluxappliance.work-mode-manual-failed", e.getMessage()));
         }
         return false;
     }
@@ -163,7 +196,7 @@ public class ElectroluxGroupAPI {
             try {
                 return sendCommand(commandJSON, applianceId);
             } catch (ElectroluxApplianceException e) {
-                logger.warn("Work mode manual failed {}", e.getMessage());
+                logger.warn("{}", getLocalizedText("warning.electroluxappliance.fanspeed-failed", e.getMessage()));
             }
         }
         return false;
@@ -174,7 +207,7 @@ public class ElectroluxGroupAPI {
         try {
             return sendCommand(commandJSON, applianceId);
         } catch (ElectroluxApplianceException e) {
-            logger.warn("Work mode manual failed {}", e.getMessage());
+            logger.warn("{}", getLocalizedText("warning.electroluxappliance.ionizer-failed", e.getMessage()));
         }
         return false;
     }
@@ -184,7 +217,7 @@ public class ElectroluxGroupAPI {
         try {
             return sendCommand(commandJSON, applianceId);
         } catch (ElectroluxApplianceException e) {
-            logger.warn("Work mode manual failed {}", e.getMessage());
+            logger.warn("{}", getLocalizedText("warning.electroluxappliance.uilight-failed", e.getMessage()));
         }
         return false;
     }
@@ -194,9 +227,107 @@ public class ElectroluxGroupAPI {
         try {
             return sendCommand(commandJSON, applianceId);
         } catch (ElectroluxApplianceException e) {
-            logger.warn("Work mode manual failed {}", e.getMessage());
+            logger.warn("{}", getLocalizedText("warning.electroluxappliance.safetylock-failed", e.getMessage()));
         }
         return false;
+    }
+
+    public boolean sendCapabilityRequest(final String applianceId, final String capbilityNmae,
+            final @Nullable ApplianceDTO dto, final String value) {
+        if (dto == null) {
+            logger.warn("{}", getLocalizedText("error.electroluxappliance.api.capability.unknown-dto", capbilityNmae));
+            return false;
+        }
+
+        final ApplianceInfoDTO.@Nullable Capability capability = dto.getApplianceInfo().getCapability(capbilityNmae);
+        if (capability == null) {
+            logger.warn("{}",
+                    getLocalizedText("error.electroluxappliance.api.capability.capability-unknown", capbilityNmae));
+            return false;
+        }
+
+        // If the capability on the device does not support readwrite then we cant set it
+        if (!capability.getAccess().equals("readwrite")) {
+            logger.warn("{}",
+                    getLocalizedText("error.electroluxappliance.api.capability.no-read-write", capbilityNmae));
+            return false;
+        }
+
+        String payload = "";
+
+        // Determine the capability type for further processing
+        switch (capability.getType()) {
+            case "string":
+                // If it's a string typically there is a range of values allowed.
+                String command = value;
+                if (!capability.getValuesContains(command)) {
+                    // try forcing uppercase as all commands are for the PAC units
+                    command = command.toUpperCase();
+                    if (!capability.getValuesContains(command)) {
+                        logger.warn("{}", getLocalizedText("error.electroluxappliance.api.capability.not-in-values",
+                                capbilityNmae, value));
+                        return false;
+                    }
+                }
+                payload = "{ \"" + capbilityNmae + "\": \"" + command + "\"}";
+                break;
+            case "temperature":
+            case "number":
+                int valNum = Integer.MIN_VALUE;
+                try {
+                    valNum = Integer.parseInt(value);
+                } catch (NumberFormatException nfe) {
+                    logger.warn("{}", getLocalizedText("error.electroluxappliance.api.capability.not-expected-numeric",
+                            capbilityNmae, value));
+                    return false;
+                }
+                if (capability.getIsReadMin() && capability.getMin() > valNum) {
+                    logger.warn("{}", getLocalizedText("error.electroluxappliance.api.capability.numeric-below-min",
+                            capbilityNmae, value, capability.getMin()));
+                    return false;
+                }
+                if (capability.getIsReadMax() && valNum > capability.getMax()) {
+                    logger.warn("{}", getLocalizedText("error.electroluxappliance.api.capability.numeric-above-max",
+                            capbilityNmae, value, capability.getMax()));
+                    return false;
+                }
+
+                // If step is defined ensure the transmitted value is rounded to the nearest step
+                if (capability.getIsReadStep()) {
+                    int remainder = valNum % capability.getStep();
+                    if (remainder != 0) {
+                        valNum = Math.round((float) valNum / capability.getStep()) * capability.getStep();
+                    }
+                }
+
+                if (!capability.getValuesContains(String.valueOf(valNum))) {
+                    logger.warn("{}",
+                            getLocalizedText(
+                                    "error.electroluxappliance.api.capability.numeric-after-step-not-in-values",
+                                    capbilityNmae, value, valNum));
+                    return false;
+                }
+
+                payload = "{ \"" + capbilityNmae + "\": " + valNum + " }";
+
+                break;
+            case "boolean":
+                final String boolCommand = value.toLowerCase();
+                if (!"true".equals(boolCommand) && !"false".equals(boolCommand)) {
+                    logger.warn("{}", getLocalizedText("error.electroluxappliance.api.capability.invalid-boolean-value",
+                            capbilityNmae, value));
+                }
+                payload = "{ \"" + capbilityNmae + "\": " + boolCommand + " }";
+                break;
+        }
+
+        try {
+            return sendCommand(payload, applianceId);
+        } catch (ElectroluxApplianceException e) {
+            logger.warn("{}", getLocalizedText("warning.electroluxappliance.failed-capability-send", capbilityNmae,
+                    e.getMessage()));
+            return false;
+        }
     }
 
     private Request createRequest(String uri, HttpMethod httpMethod) {
@@ -219,7 +350,8 @@ public class ElectroluxGroupAPI {
             ContentResponse httpResponse;
             httpResponse = request.send();
             if (httpResponse.getStatus() != HttpStatus.OK_200) {
-                throw new ElectroluxApplianceException("Failed to refresh tokens" + httpResponse.getContentAsString());
+                throw new ElectroluxApplianceException("Failed to refresh tokens, HTTP status: "
+                        + httpResponse.getStatus() + ", response: " + httpResponse.getContentAsString());
             }
             json = httpResponse.getContentAsString();
             logger.trace("Tokens: {}", json);
@@ -232,7 +364,17 @@ public class ElectroluxGroupAPI {
             logger.debug("Token expires in: {}s", expiresIn);
             this.tokenExpiry = Instant.now().plusSeconds(expiresIn);
             logger.debug("Token expires: {}", this.tokenExpiry);
-        } catch (InterruptedException | TimeoutException | ExecutionException e) {
+        } catch (InterruptedException | TimeoutException e) {
+            throw new ElectroluxApplianceException(e);
+        } catch (ExecutionException e) {
+            // The Electrolux token endpoint returns HTTP 401 without a WWW-Authenticate header (a violation of
+            // RFC 7235), which makes Jetty throw an HttpResponseException wrapped in an ExecutionException instead of
+            // returning the response. Extract the status from the cause so a 401 can be reported explicitly.
+            if (e.getCause() instanceof HttpResponseException httpResponseException
+                    && httpResponseException.getResponse().getStatus() == HttpStatus.UNAUTHORIZED_401) {
+                throw new ElectroluxApplianceException(
+                        "Failed to refresh token, refresh token is invalid or expired (HTTP 401)");
+            }
             throw new ElectroluxApplianceException(e);
         }
     }
@@ -258,10 +400,20 @@ public class ElectroluxGroupAPI {
                     }
                 } catch (TimeoutException e) {
                     logger.debug("TimeoutException error in get: {}", e.getMessage());
+                } catch (ExecutionException e) {
+                    // A 401 is thrown as an HttpResponseException because the API omits the WWW-Authenticate
+                    // header. Refresh the token so the next retry uses a valid access token.
+                    if (e.getCause() instanceof HttpResponseException httpResponseException
+                            && httpResponseException.getResponse().getStatus() == HttpStatus.UNAUTHORIZED_401) {
+                        logger.debug("getFromApi unauthorized (HTTP 401), refreshing token");
+                        refreshToken();
+                    } else {
+                        logger.debug("ExecutionException error in get: {}", e.getMessage());
+                    }
                 }
             }
             throw new ElectroluxApplianceException("Failed to fetch from API!");
-        } catch (JsonSyntaxException | ElectroluxApplianceException | ExecutionException e) {
+        } catch (JsonSyntaxException | ElectroluxApplianceException e) {
             throw new ElectroluxApplianceException(e);
         }
     }
@@ -304,17 +456,27 @@ public class ElectroluxGroupAPI {
                     String content = response.getContentAsString();
                     logger.trace("API response: {}", content);
 
-                    if (response.getStatus() != HttpStatus.OK_200) {
+                    if (!HttpStatus.isSuccess(response.getStatus())) {
                         logger.debug("sendCommand failed, HTTP status: {}", response.getStatus());
                         refreshToken();
                     } else {
                         return true;
                     }
                 } catch (TimeoutException | InterruptedException e) {
-                    logger.warn("TimeoutException error in get");
+                    logger.warn("{}", getLocalizedText("error.electroluxappliance.api.get-timeout"));
+                } catch (ExecutionException e) {
+                    // A 401 is thrown as an HttpResponseException because the API omits the WWW-Authenticate
+                    // header. Refresh the token so the next retry uses a valid access token.
+                    if (e.getCause() instanceof HttpResponseException httpResponseException
+                            && httpResponseException.getResponse().getStatus() == HttpStatus.UNAUTHORIZED_401) {
+                        logger.debug("sendCommand unauthorized (HTTP 401), refreshing token");
+                        refreshToken();
+                    } else {
+                        logger.debug("ExecutionException error in sendCommand: {}", e.getMessage());
+                    }
                 }
             }
-        } catch (JsonSyntaxException | ElectroluxApplianceException | ExecutionException e) {
+        } catch (JsonSyntaxException | ElectroluxApplianceException e) {
             throw new ElectroluxApplianceException(e);
         }
         return false;

@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2010-2025 Contributors to the openHAB project
+ * Copyright (c) 2010-2026 Contributors to the openHAB project
  *
  * See the NOTICE file(s) distributed with this work for additional
  * information.
@@ -17,6 +17,7 @@ import java.net.DatagramSocket;
 import java.net.InetAddress;
 import java.net.UnknownHostException;
 import java.nio.charset.StandardCharsets;
+import java.time.Instant;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
@@ -94,7 +95,7 @@ public class DaikinACUnitDiscoveryService extends AbstractDiscoveryService {
     }
 
     private void scanner() {
-        var timestampOfLastScan = getTimestampOfLastScan();
+        Instant timestampOfLastScan = getTimestampOfLastScan();
         for (InetAddress broadcastAddress : getBroadcastAddresses()) {
             logger.trace("Starting broadcast for {}", broadcastAddress.toString());
 
@@ -109,7 +110,9 @@ public class DaikinACUnitDiscoveryService extends AbstractDiscoveryService {
                 socket.send(packet);
 
                 // receivePacketAndDiscover will return false if no packet is received after 1 second
-                while (receivePacketAndDiscover(socket)) {
+                boolean keepReading = true;
+                while (keepReading) {
+                    keepReading = receivePacketAndDiscover(socket);
                 }
             } catch (Exception e) {
                 // Nothing to do here - the host couldn't be found, likely because it doesn't exist
@@ -135,7 +138,7 @@ public class DaikinACUnitDiscoveryService extends AbstractDiscoveryService {
             String thingId = parsedData.getOrDefault("ssid", host.replace(".", "_"));
             String mac = parsedData.getOrDefault("mac", "");
             String uuid = mac.isEmpty() ? UUID.randomUUID().toString()
-                    : UUID.nameUUIDFromBytes(mac.getBytes()).toString();
+                    : UUID.nameUUIDFromBytes(mac.getBytes(StandardCharsets.UTF_8)).toString();
 
             DaikinWebTargets webTargets = new DaikinWebTargets(httpClient, host, secure, null);
             boolean found = false;

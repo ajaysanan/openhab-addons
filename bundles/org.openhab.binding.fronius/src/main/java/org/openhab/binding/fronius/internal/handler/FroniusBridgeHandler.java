@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2010-2025 Contributors to the openHAB project
+ * Copyright (c) 2010-2026 Contributors to the openHAB project
  *
  * See the NOTICE file(s) distributed with this work for additional
  * information.
@@ -14,18 +14,25 @@ package org.openhab.binding.fronius.internal.handler;
 
 import static org.openhab.binding.fronius.internal.FroniusBindingConstants.API_TIMEOUT;
 
-import java.util.HashSet;
+import java.io.IOException;
+import java.security.cert.CertificateException;
 import java.util.Map;
 import java.util.Set;
+import java.util.concurrent.CopyOnWriteArraySet;
 import java.util.concurrent.ScheduledFuture;
 import java.util.concurrent.TimeUnit;
 
 import org.eclipse.jdt.annotation.NonNullByDefault;
 import org.eclipse.jdt.annotation.Nullable;
+import org.eclipse.jetty.client.HttpClient;
 import org.eclipse.jetty.http.HttpMethod;
 import org.openhab.binding.fronius.internal.FroniusBridgeConfiguration;
 import org.openhab.binding.fronius.internal.api.FroniusCommunicationException;
+import org.openhab.binding.fronius.internal.api.FroniusConfigApiClient;
 import org.openhab.binding.fronius.internal.api.FroniusHttpUtil;
+import org.openhab.binding.fronius.internal.api.FroniusPollingSkipException;
+import org.openhab.binding.fronius.internal.api.FroniusTlsTrustManagerProvider;
+import org.openhab.core.io.net.http.TlsTrustManagerProvider;
 import org.openhab.core.thing.Bridge;
 import org.openhab.core.thing.ChannelUID;
 import org.openhab.core.thing.Thing;
@@ -34,6 +41,9 @@ import org.openhab.core.thing.ThingStatusDetail;
 import org.openhab.core.thing.binding.BaseBridgeHandler;
 import org.openhab.core.thing.binding.ThingHandler;
 import org.openhab.core.types.Command;
+import org.osgi.framework.BundleContext;
+import org.osgi.framework.FrameworkUtil;
+import org.osgi.framework.ServiceRegistration;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -50,11 +60,30 @@ import org.slf4j.LoggerFactory;
 public class FroniusBridgeHandler extends BaseBridgeHandler {
 
     private final Logger logger = LoggerFactory.getLogger(FroniusBridgeHandler.class);
-    private final Set<FroniusBaseThingHandler> services = new HashSet<>();
+    private final FroniusHttpUtil httpUtil = new FroniusHttpUtil();
+    private final FroniusConfigApiClient configApiClient;
+    private final Set<FroniusBaseThingHandler> services = new CopyOnWriteArraySet<>();
     private @Nullable ScheduledFuture<?> refreshJob;
+    private @Nullable ServiceRegistration<?> tlsProviderService;
 
-    public FroniusBridgeHandler(Bridge bridge) {
+    public FroniusBridgeHandler(Bridge bridge, HttpClient httpClient) {
         super(bridge);
+        this.configApiClient = new FroniusConfigApiClient(httpUtil, httpClient);
+    }
+
+    private void setupTlsTrustManager(String host) throws CertificateException, IOException {
+        FroniusTlsTrustManagerProvider trustManagerProvider = new FroniusTlsTrustManagerProvider(host);
+        BundleContext context = FrameworkUtil.getBundle(getClass()).getBundleContext();
+        this.tlsProviderService = context.registerService(TlsTrustManagerProvider.class.getName(), trustManagerProvider,
+                null);
+    }
+
+    private void unregisterTlsTrustManager() {
+        ServiceRegistration<?> tlsProviderService = this.tlsProviderService;
+        if (tlsProviderService != null) {
+            tlsProviderService.unregister();
+            this.tlsProviderService = null;
+        }
     }
 
     @Override
@@ -80,6 +109,13 @@ public class FroniusBridgeHandler extends BaseBridgeHandler {
         }
 
         if (validConfig) {
+            if ("https".equals(config.scheme)) {
+                try {
+                    setupTlsTrustManager(hostname);
+                } catch (CertificateException | IOException e) {
+                    logger.error("Error setting up TLS trust manager for host '{}': {}", hostname, e.getMessage());
+                }
+            }
             startAutomaticRefresh();
         } else {
             updateStatus(ThingStatus.OFFLINE, ThingStatusDetail.CONFIGURATION_ERROR, errorMsg);
@@ -93,6 +129,15 @@ public class FroniusBridgeHandler extends BaseBridgeHandler {
             localRefreshJob.cancel(true);
             refreshJob = null;
         }
+        unregisterTlsTrustManager();
+    }
+
+    FroniusHttpUtil getHttpUtil() {
+        return httpUtil;
+    }
+
+    FroniusConfigApiClient getConfigApiClient() {
+        return configApiClient;
     }
 
     @Override
@@ -144,6 +189,9 @@ public class FroniusBridgeHandler extends BaseBridgeHandler {
                     for (FroniusBaseThingHandler service : services) {
                         service.refresh(config);
                     }
+                } catch (FroniusPollingSkipException e) {
+                    logger.debug("Skipping refresh for bridge '{}' because another request is still in progress.",
+                            getThing().getUID().getId());
                 } catch (FroniusCommunicationException e) {
                     updateStatus(ThingStatus.OFFLINE, ThingStatusDetail.OFFLINE.COMMUNICATION_ERROR, e.getMessage());
                 }
@@ -154,6 +202,6 @@ public class FroniusBridgeHandler extends BaseBridgeHandler {
     }
 
     private void checkBridgeOnline(FroniusBridgeConfiguration config) throws FroniusCommunicationException {
-        FroniusHttpUtil.executeUrl(HttpMethod.GET, "http://" + config.hostname, API_TIMEOUT);
+        httpUtil.executePollingUrl(HttpMethod.GET, config.scheme + "://" + config.hostname, API_TIMEOUT);
     }
 }

@@ -4,59 +4,87 @@
 	xmlns:thing="https://openhab.org/schemas/thing-description/v1.0.0"
 	xsi:schemaLocation="https://openhab.org/schemas/thing-description/v1.0.0 https://openhab.org/schemas/thing-description-1.0.0.xsd">
 
-	<channel-type id="bbrhpjrType">
+	<channel-type id="bbr-hp-jr">
 		<item-type>Number:Energy</item-type>
 		<label>BBRHPJR</label>
 		<description>Total consumed energy at high rate pricing on red days</description>
 		<category>Energy</category>
+		<tags>
+			<tag>Measurement</tag>
+			<tag>Energy</tag>
+		</tags>
 		<state pattern="%d %unit%" readOnly="true"/>
 	</channel-type>
 
-	<channel-type id="bbrhcjrType">
+	<channel-type id="bbr-hc-jr">
 		<item-type>Number:Energy</item-type>
 		<label>BBRHCJR</label>
 		<description>Total consumed energy at low rate pricing on red days</description>
 		<category>Energy</category>
+		<tags>
+			<tag>Measurement</tag>
+			<tag>Energy</tag>
+		</tags>
 		<state pattern="%d %unit%" readOnly="true"/>
 	</channel-type>
 
-	<channel-type id="bbrhpjwType">
+	<channel-type id="bbr-hp-jw">
 		<item-type>Number:Energy</item-type>
 		<label>BBRHPJW</label>
 		<description>Total consumed energy at high rate pricing on white days</description>
 		<category>Energy</category>
+		<tags>
+			<tag>Measurement</tag>
+			<tag>Energy</tag>
+		</tags>
 		<state pattern="%d %unit%" readOnly="true"/>
 	</channel-type>
 
-	<channel-type id="bbrhcjwType">
+	<channel-type id="bbr-hc-jw">
 		<item-type>Number:Energy</item-type>
 		<label>BBRHCJW</label>
 		<description>Total consumed energy at low rate pricing on white days</description>
 		<category>Energy</category>
+		<tags>
+			<tag>Measurement</tag>
+			<tag>Energy</tag>
+		</tags>
 		<state pattern="%d %unit%" readOnly="true"/>
 	</channel-type>
 
-	<channel-type id="bbrhpjbType">
+	<channel-type id="bbr-hp-jb">
 		<item-type>Number:Energy</item-type>
 		<label>BBRHPJB</label>
 		<description>Total consumed energy at high rate pricing on blue days</description>
 		<category>Energy</category>
+		<tags>
+			<tag>Measurement</tag>
+			<tag>Energy</tag>
+		</tags>
 		<state pattern="%d %unit%" readOnly="true"/>
 	</channel-type>
 
-	<channel-type id="bbrhcjbType">
+	<channel-type id="bbr-hc-jb">
 		<item-type>Number:Energy</item-type>
 		<label>BBRHCJB</label>
 		<description>Total consumed energy at low rate pricing on blue days</description>
 		<category>Energy</category>
+		<tags>
+			<tag>Measurement</tag>
+			<tag>Energy</tag>
+		</tags>
 		<state pattern="%d %unit%" readOnly="true"/>
 	</channel-type>
 
-	<channel-type id="couleurDemainType">
+	<channel-type id="couleur-demain">
 		<item-type>String</item-type>
 		<label>DEMAIN</label>
 		<description>Following day color</description>
 		<category>Energy</category>
+		<tags>
+			<tag>Status</tag>
+			<tag>Info</tag>
+		</tags>
 		<state pattern="%s" readOnly="true">
 			<options>
 				<option value="Bleu">Bleu</option>
@@ -66,11 +94,15 @@
 		</state>
 	</channel-type>
 
-	<channel-type id="programmeCircuit1Type">
+	<channel-type id="programme-circuit-1">
 		<item-type>String</item-type>
 		<label>ProgrammeCircuit1</label>
 		<description>Circuit 1 program</description>
 		<category>Energy</category>
+		<tags>
+			<tag>Status</tag>
+			<tag>Info</tag>
+		</tags>
 		<state pattern="%s" readOnly="true">
 			<options>
 				<option value="A">A</option>
@@ -80,11 +112,15 @@
 		</state>
 	</channel-type>
 
-	<channel-type id="programmeCircuit2Type">
+	<channel-type id="programme-circuit-2">
 		<item-type>String</item-type>
 		<label>ProgrammeCircuit2</label>
 		<description>Circuit 2 program</description>
 		<category>Energy</category>
+		<tags>
+			<tag>Status</tag>
+			<tag>Info</tag>
+		</tags>
 		<state pattern="%s" readOnly="true">
 			<options>
 				<option value="P0">P0</option>

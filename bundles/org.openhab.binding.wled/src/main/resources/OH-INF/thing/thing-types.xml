@@ -23,6 +23,10 @@
 			<channel id="syncSend" typeId="syncSend"/>
 			<channel id="syncReceive" typeId="syncReceive"/>
 		</channels>
+		<properties>
+			<property name="macAddress"></property>
+		</properties>
+		<representation-property>macAddress</representation-property>
 		<config-description>
 			<parameter name="address" type="text" required="true">
 				<label>Address</label>
@@ -84,6 +88,7 @@
 			<channel id="grouping" typeId="grouping"/>
 			<channel id="spacing" typeId="spacing"/>
 		</channels>
+		<representation-property>segmentIndex</representation-property>
 		<config-description>
 			<parameter name="segmentIndex" type="integer" min="0">
 				<label>Segment Index</label>
@@ -99,6 +104,10 @@
 		<label>Global Brightness</label>
 		<description>Allows you to fade and turn all segments ON and OFF at the same time</description>
 		<category>ColorLight</category>
+		<tags>
+			<tag>Control</tag>
+			<tag>Brightness</tag>
+		</tags>
 	</channel-type>
 
 	<channel-type id="masterControls">
@@ -108,7 +117,7 @@
 		<category>ColorLight</category>
 		<tags>
 			<tag>Control</tag>
-			<tag>Light</tag>
+			<tag>Color</tag>
 		</tags>
 	</channel-type>
 
@@ -117,6 +126,10 @@
 		<label>Segment Brightness</label>
 		<description>Changes the brightness of the whole segment</description>
 		<category>ColorLight</category>
+		<tags>
+			<tag>Control</tag>
+			<tag>Brightness</tag>
+		</tags>
 	</channel-type>
 
 	<channel-type id="primaryColor" advanced="true">
