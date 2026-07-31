@@ -62,7 +62,7 @@
 			</channel>
 			<channel id="pool_heater" typeId="equipment-switch">
 				<label>Pool Heater Switch</label>
-				<description>Pool heater Switch</description>
+				<description>Pool heater switch</description>
 			</channel>
 			<channel id="solar_heater_status" typeId="equipment-heater">
 				<label>Solar Heater Status</label>
@@ -107,6 +107,39 @@
 			<parameter name="serialId" type="text" required="false">
 				<label>Serial Number</label>
 				<description>Optionally specify the serial number of the controller which can be found on the iAquaLink Owner's
+					Center. This is only useful if you have more than one controller (pool) associated with your account. Leave blank
+					to have the first controller used.
+				</description>
+			</parameter>
+			<parameter name="apiKey" type="text" required="false">
+				<label>API Key</label>
+				<description>Optionally specify the API key used for access. This is only useful for debugging or if the API key is
+					changed by the vendor
+				</description>
+				<default>EOOEMOW4YR6QNB07</default>
+			</parameter>
+		</config-description>
+	</thing-type>
+
+	<thing-type id="controllerV2">
+		<label>iAquaLink Pool Controller - New</label>
+		<description>An iAquaLink pool control thing represents an iAquaLink pool controller for Jandy/Zodiac systems.
+			This new
+			version currently only supports Zodiac Hydroxinator systems.</description>
+
+		<config-description>
+			<parameter name="userName" type="text" required="true">
+				<label>User Name</label>
+				<description>The username to use when connecting to an iAqualink Account</description>
+			</parameter>
+			<parameter name="password" type="text" required="true">
+				<context>password</context>
+				<label>Password</label>
+				<description>The password to use when connecting to an iAqualink Account</description>
+			</parameter>
+			<parameter name="serialId" type="text" required="false">
+				<label>Serial Number</label>
+				<description>Optionally specify the serial number of the controller which can be found on the iAquaLink Owner's
 					Center. This is only useful if you have more then one controller (pool) associated with your account. Leave blank
 					to have the first controller used.
 				</description>
@@ -134,7 +167,7 @@
 	<channel-type id="system_type" advanced="true">
 		<item-type>String</item-type>
 		<label>System Type</label>
-		<description> System Type</description>
+		<description>System Type</description>
 		<state readOnly="true"/>
 
 	</channel-type>
@@ -145,12 +178,20 @@
 		<item-type>Switch</item-type>
 		<label>Auxiliary Switch</label>
 		<description>The current state of auxiliary channel</description>
+		<tags>
+			<tag>Switch</tag>
+			<tag>Power</tag>
+		</tags>
 	</channel-type>
 
 	<channel-type id="aux-dimmer">
 		<item-type>Dimmer</item-type>
 		<label>Auxiliary Dimmer</label>
 		<description>The current state of auxiliary channel</description>
+		<tags>
+			<tag>Control</tag>
+			<tag>Brightness</tag>
+		</tags>
 		<state step="25"></state>
 	</channel-type>
 
@@ -158,6 +199,10 @@
 		<item-type>String</item-type>
 		<label>Jandy Color Lighting</label>
 		<description>Jandy Color Lighting Channel</description>
+		<tags>
+			<tag>Control</tag>
+			<tag>Light</tag>
+		</tags>
 		<state>
 			<options>
 				<option value="off">Off</option>
@@ -181,6 +226,10 @@
 		<item-type>String</item-type>
 		<label>Pentair SAm/SAL Lighting</label>
 		<description>Pentair SAm/SAL Lighting Channel</description>
+		<tags>
+			<tag>Control</tag>
+			<tag>Light</tag>
+		</tags>
 		<state>
 			<options>
 				<option value="off">Off</option>
@@ -203,6 +252,10 @@
 		<item-type>String</item-type>
 		<label>Jandy Led Water Colors Lighting</label>
 		<description>Jandy Led Water Colors Lighting Channel</description>
+		<tags>
+			<tag>Control</tag>
+			<tag>Light</tag>
+		</tags>
 		<state>
 			<options>
 				<option value="off">Off</option>
@@ -229,6 +282,10 @@
 		<item-type>String</item-type>
 		<label>Pentair intelliBrite Lighting</label>
 		<description>Pentair intelliBrite Lighting Channel</description>
+		<tags>
+			<tag>Control</tag>
+			<tag>Light</tag>
+		</tags>
 		<state>
 			<options>
 				<option value="off">Off</option>
@@ -255,6 +312,10 @@
 		<item-type>String</item-type>
 		<label>Hayward Universal Lighting</label>
 		<description>Hayward Universal Lighting Channel</description>
+		<tags>
+			<tag>Control</tag>
+			<tag>Light</tag>
+		</tags>
 		<state>
 			<options>
 				<option value="off">Off</option>
@@ -304,6 +365,10 @@
 		<item-type>Number:Temperature</item-type>
 		<label>Setpoint</label>
 		<category>Temperature</category>
+		<tags>
+			<tag>Setpoint</tag>
+			<tag>Temperature</tag>
+		</tags>
 		<state pattern="%.1f %unit%"/>
 
 	</channel-type>
@@ -312,6 +377,10 @@
 		<item-type>Number:Temperature</item-type>
 		<label>Temperature</label>
 		<category>Temperature</category>
+		<tags>
+			<tag>Measurement</tag>
+			<tag>Temperature</tag>
+		</tags>
 		<state pattern="%.1f %unit%" readOnly="true"/>
 
 	</channel-type>
@@ -329,4 +398,24 @@
 		<category>Other</category>
 		<state readOnly="true"/>
 	</channel-type>
+
+	<channel-type id="schedule-time">
+		<item-type>String</item-type>
+		<label>Schedule Time</label>
+		<category>Other</category>
+	</channel-type>
+
+	<channel-type id="duration">
+		<item-type>Number:Time</item-type>
+		<label>Duration</label>
+		<category>Other</category>
+	</channel-type>
+
+	<channel-type id="readonly-switch">
+		<item-type>Switch</item-type>
+		<label>Readonly Switch</label>
+		<description>The current (readonly) state</description>
+		<state readOnly="true"/>
+	</channel-type>
+
 </thing:thing-descriptions>

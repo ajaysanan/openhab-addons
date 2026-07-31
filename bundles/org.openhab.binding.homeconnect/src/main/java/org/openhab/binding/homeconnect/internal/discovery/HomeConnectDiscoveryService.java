@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2010-2025 Contributors to the openHAB project
+ * Copyright (c) 2010-2026 Contributors to the openHAB project
  *
  * See the NOTICE file(s) distributed with this work for additional
  * information.
@@ -14,6 +14,7 @@ package org.openhab.binding.homeconnect.internal.discovery;
 
 import static org.openhab.binding.homeconnect.internal.HomeConnectBindingConstants.*;
 
+import java.time.Instant;
 import java.util.List;
 import java.util.Map;
 
@@ -71,7 +72,8 @@ public class HomeConnectDiscoveryService extends AbstractThingHandlerDiscoverySe
                 ThingTypeUID thingTypeUID = getThingTypeUID(appliance);
 
                 if (thingTypeUID != null) {
-                    logger.debug("Found {} ({}).", appliance.getHaId(), appliance.getType().toUpperCase());
+                    logger.debug("Found {} ({}).", appliance.getHaId(),
+                            appliance.getType().toUpperCase(DEFAULT_LOCALE));
 
                     Map<String, Object> properties = Map.of(HA_ID, appliance.getHaId());
                     String name = appliance.getBrand() + " " + appliance.getName() + " (" + appliance.getHaId() + ")";
@@ -97,7 +99,7 @@ public class HomeConnectDiscoveryService extends AbstractThingHandlerDiscoverySe
     @Override
     public void dispose() {
         super.dispose();
-        removeOlderResults(System.currentTimeMillis(), thingHandler.getThing().getUID());
+        removeOlderResults(Instant.now(), thingHandler.getThing().getUID());
     }
 
     @Override
@@ -128,6 +130,8 @@ public class HomeConnectDiscoveryService extends AbstractThingHandlerDiscoverySe
             thingTypeUID = THING_TYPE_COOKTOP;
         } else if (THING_TYPE_WASHER.getId().equalsIgnoreCase(appliance.getType())) {
             thingTypeUID = THING_TYPE_WASHER;
+        } else if (THING_TYPE_CLEANING_ROBOT.getId().equalsIgnoreCase(appliance.getType())) {
+            thingTypeUID = THING_TYPE_CLEANING_ROBOT;
         }
 
         return thingTypeUID;

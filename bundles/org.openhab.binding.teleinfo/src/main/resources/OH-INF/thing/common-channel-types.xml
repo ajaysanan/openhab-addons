@@ -4,19 +4,27 @@
 	xmlns:thing="https://openhab.org/schemas/thing-description/v1.0.0"
 	xsi:schemaLocation="https://openhab.org/schemas/thing-description/v1.0.0 https://openhab.org/schemas/thing-description-1.0.0.xsd">
 
-	<channel-type id="isouscType">
+	<channel-type id="i-sousc">
 		<item-type>Number:ElectricCurrent</item-type>
 		<label>ISOUSC</label>
 		<description>Subscribed electric current</description>
 		<category>Energy</category>
+		<tags>
+			<tag>Measurement</tag>
+			<tag>Current</tag>
+		</tags>
 		<state pattern="%d A" readOnly="true"/>
 	</channel-type>
 
-	<channel-type id="ptecType">
+	<channel-type id="p-tec">
 		<item-type>String</item-type>
 		<label>PTEC</label>
 		<description>Current pricing period</description>
 		<category>Energy</category>
+		<tags>
+			<tag>Status</tag>
+			<tag>Info</tag>
+		</tags>
 		<state pattern="%s" readOnly="true">
 			<options>
 				<option value="TH">TH</option>
@@ -34,11 +42,15 @@
 		</state>
 	</channel-type>
 
-	<channel-type id="hhphcType">
+	<channel-type id="h-hphc">
 		<item-type>String</item-type>
 		<label>HHPHC</label>
 		<description>Pricing schedule group</description>
 		<category>Energy</category>
+		<tags>
+			<tag>Status</tag>
+			<tag>Info</tag>
+		</tags>
 		<state pattern="%s" readOnly="true">
 			<options>
 				<option value="A">A</option>
@@ -50,7 +62,7 @@
 		</state>
 	</channel-type>
 
-	<channel-type id="lastUpdateType">
+	<channel-type id="last-update">
 		<item-type>DateTime</item-type>
 		<label>Last Update</label>
 		<description>Timestamp of last received Teleinfo frame</description>
