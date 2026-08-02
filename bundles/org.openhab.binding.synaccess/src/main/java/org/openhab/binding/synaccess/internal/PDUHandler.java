@@ -68,7 +68,7 @@ public class PDUHandler extends BaseThingHandler {
 
             List<Channel> channelList = new ArrayList<>();
 
-            logger.debug("Configuring {} channels for PDU", numberChannels);
+            logger.debug("Configuring {} channels for PDU {}", numberChannels, thing.getUID());
             ThingBuilder thingBuilder = editThing();
 
             // add channels
@@ -111,7 +111,7 @@ public class PDUHandler extends BaseThingHandler {
         if (channelUID.getId().startsWith(CHANNEL_PORTSTATUS)) {
             if (command instanceof OnOffType) {
                 StringBuilder outCommand = new StringBuilder("$A3 ");
-                outCommand.append(channelUID.getId().substring(channelUID.getId().length() - 1));
+                outCommand.append(Integer.parseInt(channelUID.getId().substring(channelUID.getId().length() - 1)) - 1);
                 outCommand.append(command.equals(OnOffType.ON) ? " 1" : " 0");
                 sendCommand(outCommand.toString());
             } else if (command instanceof RefreshType) {
@@ -132,20 +132,21 @@ public class PDUHandler extends BaseThingHandler {
         }
     }
 
-    public void handleUpdate(String... parameters) {
+    public void handleUpdate(int port, String status) {
+        // First Parameter is the port which has changed status (0 based)
+        // Second Parameter is the port status (0 or 1)
         if (getThing().getStatus() == ThingStatus.UNKNOWN) {
             updateStatus(ThingStatus.ONLINE);
         }
-        if (parameters.length > 1) {
-            BigDecimal state = new BigDecimal(parameters[1]);
-            updateState("portstatus" + parameters[0],
-                    state.compareTo(BigDecimal.ZERO) == 0 ? OnOffType.OFF : OnOffType.ON);
-        }
+
+        BigDecimal state = new BigDecimal(status);
+        updateState(CHANNEL_PORTSTATUS + port, state.compareTo(BigDecimal.ZERO) == 0 ? OnOffType.OFF : OnOffType.ON);
+
     }
 
     @Override
     public void bridgeStatusChanged(ThingStatusInfo bridgeStatusInfo) {
-        logger.debug("Bridge status changed to {} for synaccess device handler", bridgeStatusInfo.getStatus());
+        logger.debug("Bridge status changed to {} for device handler", bridgeStatusInfo.getStatus(), thing.getUID());
 
         if (bridgeStatusInfo.getStatus() == ThingStatus.ONLINE
                 && getThing().getStatusInfo().getStatusDetail() == ThingStatusDetail.BRIDGE_OFFLINE) {
@@ -157,7 +158,7 @@ public class PDUHandler extends BaseThingHandler {
     }
 
     protected void initDeviceState() {
-        logger.debug("Initializing device state for PDU");
+        logger.debug("Initializing device state for PDU {}", thing.getUID());
         Bridge bridge = getBridge();
         if (bridge == null) {
             updateStatus(ThingStatus.OFFLINE, ThingStatusDetail.BRIDGE_OFFLINE, "No bridge configured");
@@ -173,7 +174,7 @@ public class PDUHandler extends BaseThingHandler {
     public void channelLinked(ChannelUID channelUID) {
         // Refresh state when new item is linked. Suppress multiple requests sent within 3 seconds
         if ((Instant.now().toEpochMilli() - lastChannelUpdateTime > 3000)
-                && channelUID.getId().contains("portstatus")) {
+                && channelUID.getId().contains(CHANNEL_PORTSTATUS)) {
             lastChannelUpdateTime = Instant.now().toEpochMilli();
             sendCommand("$A5");
         }

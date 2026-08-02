@@ -49,8 +49,7 @@ public class SynaccessDiscoveryService extends AbstractDiscoveryService {
         ThingUID bridgeUID = bridgeHandler.getThing().getUID();
         ThingUID uid = new ThingUID(THING_TYPE_PDU, bridgeUID, "pdu");
 
-        DiscoveryResult result = DiscoveryResultBuilder.create(uid).withBridge(bridgeUID)
-                .withProperty("PARAMETER_ADDRESS", address).build();
+        DiscoveryResult result = DiscoveryResultBuilder.create(uid).withBridge(bridgeUID).build();
         thingDiscovered(result);
         logger.debug("Discovered PDU {}", uid);
     }

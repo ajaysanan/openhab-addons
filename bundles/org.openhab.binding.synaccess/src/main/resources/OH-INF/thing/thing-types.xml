@@ -7,6 +7,7 @@
     <bridge-type id="ipbridge">
         <label>Synaccess Telnet Access Point</label>
         <description>Telnet IP access point to Synaccess Power Distribution Unit</description>
+        <category>NetworkAppliance</category>
         <properties>
             <property name="Vendor">Synaccess</property>
             <property name="Firmware Version"></property>
@@ -57,6 +58,7 @@
     <bridge-type id="serialbridge">
         <label>Synaccess RS232 Bridge</label>
         <description>RS232 access point to Synaccess Power Distribution Unit</description>
+        <category>NetworkAppliance</category>
 		<properties>
             <property name="Vendor">Synaccess</property>
             <property name="Firmware Version"></property>
@@ -100,6 +102,7 @@
         <label>Synaccess PDU</label>
         <description>Controls switched loads</description>
         <category>PowerOutlet</category>
+        <semantic-equipment-tag>PowerOutlet</semantic-equipment-tag>
         <representation-property>ipAddress</representation-property>
     </thing-type>
     
