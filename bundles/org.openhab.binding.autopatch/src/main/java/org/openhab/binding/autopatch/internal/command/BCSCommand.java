@@ -86,6 +86,8 @@ public final class BCSCommand {
                 CHANNEL_BALANCE, DecimalType.class));
         BCSMap.put(CommandType.EQUALIZER, new CommandList<StringType>(ZoneType.OUTPUT, EQUALIZER, EQUALIZER, true, true,
                 CHANNEL_EQUALIZER, StringType.class));
+        BCSMap.put(CommandType.RESET,
+                new CommandList<StringType>(ZoneType.OUTPUT, "", "", false, false, CHANNEL_RESET, StringType.class));
     }
 
     private static class CommandList<T> {

@@ -61,7 +61,7 @@ public class AutopatchSerialBridgeHandler extends AutopatchBaseBridgeHandler {
 
     // reader thread is for polling of the serial port
     // recurrent and at fixed specified intervals
-    // have to poll because cannot just attach a listener because the serial libraries don't work properly with it
+    // have to poll; cannot just attach a listener because the serial libraries don't work properly with it
     protected @Nullable ScheduledFuture<?> reader;
 
     private boolean deviceIsConnected = false;
@@ -154,14 +154,13 @@ public class AutopatchSerialBridgeHandler extends AutopatchBaseBridgeHandler {
         logger.trace("Poll: checking for data from port.");
         try {
 
-            for (String data : getData()) {
-                if (data != "") {
-                    // System is connected in some way, cancel reconnect task.
-                    if (this.keepAliveReconnectJob != null) {
-                        this.keepAliveReconnectJob.cancel(true);
-                    }
-                    handleIncomingMessage(data);
+            String data = getData();
+            if (data != "") {
+                // System is connected in some way, cancel reconnect task.
+                if (this.keepAliveReconnectJob != null) {
+                    this.keepAliveReconnectJob.cancel(true);
                 }
+                handleIncomingMessage(data);
             }
 
         } catch (IOException e) {
@@ -176,10 +175,6 @@ public class AutopatchSerialBridgeHandler extends AutopatchBaseBridgeHandler {
     @Override
     public void disconnect() {
         logger.info("Autopatch serial port being closed.");
-
-        if (!deviceIsConnected) {
-            return;
-        }
 
         if (serialPort != null) {
             serialPort.close();

@@ -17,15 +17,14 @@ import org.slf4j.LoggerFactory;
 
 @NonNullByDefault
 public class BCSDecode {
-    public List<@Nullable Integer> zones = new ArrayList<@Nullable Integer>();
+    private List<@Nullable Integer> zones = new ArrayList<@Nullable Integer>();
     private List<@Nullable Integer> eqfreqbands = new ArrayList<@Nullable Integer>();
 
     private List<@Nullable Integer> rawresults = new ArrayList<@Nullable Integer>();
-    public List<String> results = new ArrayList<String>();
+    private List<String> results = new ArrayList<String>();
 
     public int level = 0; // default level 0
     public boolean error = false;
-
     public ZoneType zonetype = ZoneType.UNINITIALIZED;
     public CommandType commandName = CommandType.ERROR;
 
@@ -114,6 +113,30 @@ public class BCSDecode {
             finallist.append(result).append(" ");
         }
         return finallist.toString().trim();
+    }
+
+    public String getResult(int index) {
+        if (results.size() > 0 && index < results.size()) {
+            return results.get(index);
+        } else {
+            return BCSFunctions.defaultValue(commandName);
+        }
+    }
+
+    public List<String> getAllResults() {
+        return results;
+    }
+
+    public int getNumZones() {
+        return zones.size();
+    }
+
+    public @Nullable Integer getZone(int index) {
+        if (zones.size() > 0 && index < zones.size()) {
+            return zones.get(index);
+        } else {
+            return 0;
+        }
     }
 
 }

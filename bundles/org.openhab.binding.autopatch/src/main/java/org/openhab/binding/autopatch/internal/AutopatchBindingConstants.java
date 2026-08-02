@@ -52,6 +52,7 @@ public class AutopatchBindingConstants {
     public static final String CHANNEL_GROUP_NONE = "";
     public static final String CHANNEL_GROUP_INPUT_SETTINGS = "input-settings";
     public static final String CHANNEL_GROUP_OUTPUT_SETTINGS = "output-settings";
+    public static final String CHANNEL_GROUP_OUTPUTGROUP_SETTINGS = "output-group-settings";
     public static final String CHANNEL_GROUP_DSP_SETTINGS = "dsp-settings";
     public static final String CHANNEL_GROUP_OUTPUT_COMMANDS = "output-commands";
 
@@ -64,7 +65,8 @@ public class AutopatchBindingConstants {
     public static final String CHANNEL_TYPE_ZONECOMMAND = "wotype-zonecommand";
     public static final String CHANNEL_TYPE_DEVICECOMMAND = "wotype-devicecommand";
     public static final String CHANNEL_TYPE_GLOBALPRESET = "wotype-globalpreset";
-    public static final String CHANNEL_TYPE_OUTPUTZONES = "rotype-outputzones";
+    public static final String CHANNEL_TYPE_OUTPUTZONE_NUMERIC_MIXED = "rwtype-outputzone-numeric-mixed";
+    public static final String CHANNEL_TYPE_OUTPUTZONE_BINARY_MIXED = "rwtype-outputzone-binary-mixed";
 
     // List of all Channel IDs
     public static final String CHANNEL_GAIN = "settings#gain";
@@ -92,6 +94,9 @@ public class AutopatchBindingConstants {
 
     public static final Set<String> UPDATE_OUTPUT_CHANNELS = Set.of(CHANNEL_VOLUME, CHANNEL_MUTE,
             CHANNEL_CONNECTEDINPUT, CHANNEL_TREBLE, CHANNEL_BASS, CHANNEL_BALANCE, CHANNEL_EQUALIZER);
+
+    public static final Set<String> UPDATE_OUTPUT_GROUP_CHANNELS = Set.of(CHANNEL_VOLUME, CHANNEL_MUTE,
+            CHANNEL_CONNECTEDINPUT);
 
     public static final Set<String> DSP_CHANNELS = Set.of(CHANNEL_TREBLE, CHANNEL_BASS, CHANNEL_BALANCE,
             CHANNEL_EQUALIZER);

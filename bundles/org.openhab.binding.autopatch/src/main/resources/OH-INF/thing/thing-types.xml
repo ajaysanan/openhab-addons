@@ -192,8 +192,7 @@
         <description>Output control of group of zones for Autopatch matrix switcher</description>
         
         <channel-groups>
-            <channel-group typeId="output-settings" id="settings"/>
-            <channel-group typeId="dsp-settings" id="dspsettings"/>
+            <channel-group typeId="output-group-settings" id="settings"/>
         </channel-groups>
         
         <config-description>            

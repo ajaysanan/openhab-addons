@@ -78,6 +78,7 @@ public class BCSConstants {
         TREBLE,
         BALANCE,
         EQUALIZER,
+        RESET,
         ERROR
     }
 

@@ -13,15 +13,29 @@
             <channel id="reset" typeId="wotype-zonecommand"/>
         </channels>
     </channel-group-type>
+    
+    <channel-group-type id="output-group-settings">
+        <label>Output Group Settings</label>
+        <channels>
+            <channel id="volume" typeId="rwtype-outputzone-numeric-mixed">
+                <label>Output Zone Group Volume</label>
+            </channel>
+            <channel id="mute" typeId="rwtype-outputzone-binary-mixed"/>
+            <channel id="connectedinput" typeId="rwtype-outputzone-numeric-mixed">
+                <label>Output Zone Group Connected Input</label>
+            </channel>
+            <channel id="reset" typeId="wotype-zonecommand"/>
+        </channels>
+    </channel-group-type>
               
     <channel-group-type id="dsp-settings">
         <label>Output Zone DSP Settings</label>
         <channels>
             <channel id="treble" typeId="rwtype-tone">
-                    <label>Treble Adjustment</label>
+                <label>Treble Adjustment</label>
             </channel>
             <channel id="bass" typeId="rwtype-tone">
-                    <label>Bass Adjustment</label>
+                <label>Bass Adjustment</label>
             </channel>
             <channel id="balance" typeId="rwtype-balance"/>
             <channel id="equalizer" typeId="rwtype-equalizer"/>

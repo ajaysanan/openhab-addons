@@ -85,6 +85,7 @@ public class AutopatchIPBridgeHandler extends AutopatchBaseBridgeHandler {
             updateStatus(ThingStatus.UNKNOWN, ThingStatusDetail.NONE, "Connecting");
 
             // start the async connect task
+            logger.info("Starting the async connect task");
             scheduler.execute(() -> connect());
         }
     }
@@ -192,11 +193,7 @@ public class AutopatchIPBridgeHandler extends AutopatchBaseBridgeHandler {
 
     @Override
     public void disconnect() {
-        logger.info("Autopatch IP --> serial port disconnecting and being closed.");
-
-        if (!deviceIsConnected) {
-            return;
-        }
+        logger.info("Autopatch IP --> IP port disconnecting and being closed.");
 
         if (ipPortReader != null) {
             ipPortReader.stop();
@@ -213,7 +210,7 @@ public class AutopatchIPBridgeHandler extends AutopatchBaseBridgeHandler {
 
     @Override
     protected synchronized void reconnect() {
-        logger.debug("Keepalive timeout, attempting to reconnect to the bridge");
+        logger.info("Keepalive timeout, attempting to reconnect to the bridge");
 
         updateStatus(ThingStatus.OFFLINE, ThingStatusDetail.DUTY_CYCLE);
         disconnect();
@@ -237,7 +234,7 @@ public class AutopatchIPBridgeHandler extends AutopatchBaseBridgeHandler {
         if (connectRetryJob != null) {
             connectRetryJob.cancel(true);
         }
-        logger.debug("Scheduling connection retry in {} minutes", waitMinutes);
+        logger.info("Scheduling connection retry in {} minutes", waitMinutes);
         connectRetryJob = scheduledExecutorService.schedule(this::connect, waitMinutes, TimeUnit.MINUTES);
     }
 
@@ -297,20 +294,20 @@ public class AutopatchIPBridgeHandler extends AutopatchBaseBridgeHandler {
             while (!terminatePortReader) {
                 try {
 
-                    for (String data : getData()) {
-                        if (data != "") {
-                            // System is connected in some way, cancel reconnect task.
-                            if (keepAliveReconnectJob != null) {
-                                keepAliveReconnectJob.cancel(true);
-                            }
-                            handleIncomingMessage(data);
+                    String data = getData();
+                    if (data != "") {
+                        // System is connected in some way, cancel reconnect task.
+                        if (keepAliveReconnectJob != null) {
+                            keepAliveReconnectJob.cancel(true);
                         }
+                        handleIncomingMessage(data);
                     }
 
                 } catch (IOException e) {
+                    logger.trace("IOException {}", e.toString());
                     updateStatus(ThingStatus.OFFLINE, ThingStatusDetail.COMMUNICATION_ERROR, "Error reading from port");
-                    scheduleConnectRetry(reconnectInterval);
                     disconnect();
+                    scheduleConnectRetry(reconnectInterval);
                     break;
                 } catch (InterruptedException e) {
                     terminatePortReader = true;

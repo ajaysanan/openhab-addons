@@ -6,6 +6,7 @@
     
     <channel-type id="rwtype-connectedinput">
         <item-type>Number</item-type>
+        <kind>state</kind>
         <label>Connected Input</label>
         <description>Select the Source Input</description>
         <state min="0" max="18" step="1"/>
@@ -13,6 +14,7 @@
     
     <channel-type id="rwtype-gain">
         <item-type>Number</item-type>
+        <kind>state</kind>
         <label>Input Gain Adjustment</label>
         <description>Adjust the Gain</description>
         <state min="-10" max="10" step="0.5" pattern="%+d"/>
@@ -20,6 +22,7 @@
     
     <channel-type id="rwtype-tone">
         <item-type>Number</item-type>
+        <kind>state</kind>
         <label>Tone Adjustment</label>
         <description>Adjust the Treble or Bass</description>
         <state min="-12" max="12" step="0.5" pattern="%+d"/>
@@ -27,6 +30,7 @@
 
     <channel-type id="rwtype-balance">
         <item-type>Number</item-type>
+        <kind>state</kind>
         <label>Balance Adjustment</label>
         <description>Adjust the Balance</description>
         <state min="-100" max="100" step="1" pattern="%+d"/>
@@ -34,12 +38,14 @@
     
     <channel-type id="rwtype-equalizer">
         <item-type>String</item-type>
+        <kind>state</kind>
         <label>Equalizer Adjustment</label>
         <description>Adjust the Equalizer</description>
     </channel-type>
     
     <channel-type id="wotype-zonecommand">
         <item-type>String</item-type>
+        <kind>state</kind>
         <label>Zone Command</label>
         <state pattern="%s" readOnly="false">
         </state>
@@ -52,6 +58,7 @@
     
     <channel-type id="wotype-devicecommand">
         <item-type>String</item-type>
+        <kind>state</kind>
         <label>Device Command</label>
         <state pattern="%s" readOnly="false">
         </state>
@@ -64,15 +71,39 @@
     
     <channel-type id="wotype-globalpreset">
         <item-type>String</item-type>
+        <kind>state</kind>
         <label>Global Preset</label>
         <state min="1" max="16" step="1" pattern="%d"/>
     </channel-type>
-
-    <channel-type id="rotype-outputzones">
+    
+    <channel-type id="rwtype-outputzone-numeric-mixed">
         <item-type>String</item-type>
-        <label>Output Zone List</label>
-        <description>List of Zones for Commands (x:y or x y z)</description>
-        <state readOnly="false"/>
+        <kind>state</kind>
+        <label>Output Zone Group Value</label>
+        <description>Numeric value for an output zone or zone group channel; reports MIXED when member zones differ</description>
+        <state pattern="%s"/>
+        <autoUpdatePolicy>veto</autoUpdatePolicy>
     </channel-type>
-        
+       
+    <channel-type id="rwtype-outputzone-binary-mixed">
+        <item-type>String</item-type>
+        <kind>state</kind>
+        <label>Output Zone Group Mute</label>
+        <description>Mute state for an output zone or zone group channel; reports MIXED when member zones differ</description>
+        <state>
+            <options>
+                <option value="ON">On</option>
+                <option value="OFF">Off</option>
+                <option value="MIXED">Mixed</option>
+            </options>
+        </state>
+        <command>
+            <options>
+                <option value="ON">On</option>
+                <option value="OFF">Off</option>
+            </options>
+        </command>
+        <autoUpdatePolicy>veto</autoUpdatePolicy>
+    </channel-type>
+       
 </thing:thing-descriptions>

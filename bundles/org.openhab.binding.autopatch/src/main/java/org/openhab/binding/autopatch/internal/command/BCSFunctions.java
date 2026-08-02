@@ -140,6 +140,27 @@ public class BCSFunctions {
         return "";
     }
 
+    public static String defaultValue(CommandType commandName) {
+        switch (commandName) {
+            case GAIN:
+            case TREBLE:
+            case BASS:
+            case BALANCE:
+                return "0.0";
+            case EQUALIZER:
+                return "0.0 0.0 0.0 0.0 0.0 0.0 0.0 0.0 0.0 0.0";
+            case MUTEZONE:
+            case INPUTSWITCH:
+                return "";
+            case VOLUME:
+            case OUTPUTSWITCH:
+                return "0";
+            default:
+                break;
+        }
+        return "";
+    }
+
     // Build command for Verifying the status of one type from one or more zones
     public static String buildStatusCommand(CommandType commandType, int level, String zonelist) {
         StringBuilder command = new StringBuilder(COMMAND_STATUS);

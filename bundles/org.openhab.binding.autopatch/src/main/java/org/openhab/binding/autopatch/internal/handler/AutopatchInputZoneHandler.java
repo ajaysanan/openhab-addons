@@ -83,14 +83,14 @@ public class AutopatchInputZoneHandler extends AutopatchBaseZoneHandler {
         if (isLinked(channelId)) {
             // DecimalType is always Input Gain
             if (DecimalType.class.equals(state)) {
-                updateState(channelId, new DecimalType(bcs.results.get(index)));
+                updateState(channelId, new DecimalType(bcs.getResult(index)));
             } else if (StringType.class.equals(state)) {
                 // StringType is always Inputzone Output connect list
                 updateState(channelId, new StringType(bcs.getResultList()));
                 // Also update the state of all output zones in list
                 AutopatchBaseBridgeHandler bridgeHandler = this.getBridgeHandler();
                 if (bridgeHandler != null) {
-                    for (String zone : bcs.results) {
+                    for (String zone : bcs.getAllResults()) {
                         bridgeHandler.getThing().getThings().stream().filter(Thing::isEnabled).map(Thing::getHandler)
                                 .filter(AutopatchOutputZoneHandler.class::isInstance)
                                 .map(AutopatchOutputZoneHandler.class::cast)

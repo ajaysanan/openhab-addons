@@ -145,6 +145,17 @@ public abstract class AutopatchBaseZoneHandler extends BaseThingHandler {
         if (isLinked(channelUID)) {
             if (command instanceof RefreshType) {
                 updateChannel(channelId);
+            } else if (commandtype.equals(CommandType.RESET)) {
+                sendMessage(BCSFunctions.buildChangeCommand(CommandType.VOLUME, zoneLevel, zoneNumber.toString(), "0"));
+                sendMessage(
+                        BCSFunctions.buildChangeCommand(CommandType.MUTEZONE, zoneLevel, zoneNumber.toString(), "ON"));
+                sendMessage(
+                        BCSFunctions.buildChangeCommand(CommandType.BALANCE, zoneLevel, zoneNumber.toString(), "0"));
+                sendMessage(BCSFunctions.buildChangeCommand(CommandType.BASS, zoneLevel, zoneNumber.toString(), "0"));
+                sendMessage(BCSFunctions.buildChangeCommand(CommandType.TREBLE, zoneLevel, zoneNumber.toString(), "0"));
+                sendMessage(BCSFunctions.buildChangeCommand(CommandType.EQUALIZER, zoneLevel, zoneNumber.toString(),
+                        "0 0 0 0 0 0 0 0 0 0"));
+                scheduler.schedule(this::refreshAllChannels, 10, TimeUnit.SECONDS);
             } else {
                 sendMessage(BCSFunctions.buildChangeCommand(commandtype, zoneLevel, zoneNumber.toString(),
                         command.toString()));

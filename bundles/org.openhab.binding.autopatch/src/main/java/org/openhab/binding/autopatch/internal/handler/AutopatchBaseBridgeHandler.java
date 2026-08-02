@@ -19,7 +19,7 @@ import java.io.BufferedReader;
 import java.io.IOException;
 import java.io.OutputStreamWriter;
 import java.time.LocalDate;
-import java.util.ArrayList;
+import java.util.List;
 import java.util.Map;
 import java.util.concurrent.BlockingQueue;
 import java.util.concurrent.LinkedBlockingQueue;
@@ -29,12 +29,14 @@ import java.util.concurrent.TimeUnit;
 
 import org.eclipse.jdt.annotation.NonNull;
 import org.eclipse.jdt.annotation.Nullable;
+import org.openhab.binding.autopatch.internal.command.BCSConstants.CommandType;
 import org.openhab.binding.autopatch.internal.command.BCSConstants.ZoneType;
 import org.openhab.binding.autopatch.internal.command.BCSDecode;
 import org.openhab.binding.autopatch.internal.config.AutopatchBaseBridgeConfig;
 import org.openhab.binding.autopatch.internal.config.AutopatchIPBridgeConfig;
 import org.openhab.binding.autopatch.internal.config.AutopatchSerialBridgeConfig;
 import org.openhab.core.common.ThreadPoolManager;
+import org.openhab.core.library.types.OnOffType;
 import org.openhab.core.thing.Bridge;
 import org.openhab.core.thing.Channel;
 import org.openhab.core.thing.ChannelUID;
@@ -43,7 +45,9 @@ import org.openhab.core.thing.ThingStatus;
 import org.openhab.core.thing.ThingStatusDetail;
 import org.openhab.core.thing.ThingTypeUID;
 import org.openhab.core.thing.binding.BaseBridgeHandler;
+import org.openhab.core.thing.binding.ThingHandler;
 import org.openhab.core.types.Command;
+import org.openhab.core.types.State;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -108,8 +112,8 @@ public abstract class AutopatchBaseBridgeHandler extends BaseBridgeHandler {
         sendCommand("~scr!");
 
         logger.debug("Starting keepAlive job with interval {} minutes", reconnectInterval);
-        keepAliveJob = scheduledExecutorService.scheduleWithFixedDelay(this::sendKeepAlive, reconnectInterval,
-                reconnectInterval, TimeUnit.MINUTES);
+        keepAliveJob = scheduledExecutorService.scheduleWithFixedDelay(this::sendKeepAlive, 1, reconnectInterval,
+                TimeUnit.MINUTES);
     }
 
     protected void sendKeepAlive() {
@@ -161,12 +165,14 @@ public abstract class AutopatchBaseBridgeHandler extends BaseBridgeHandler {
 
     }
 
-    public synchronized ArrayList<String> getData() throws IOException, InterruptedException {
+    public synchronized String getData() throws IOException, InterruptedException {
+        logger.trace("IP reader waiting for available data");
         final BufferedReader dataInput = this.dataInput;
 
         char readchar;
         int readint = 0;
-        ArrayList<String> messages = new ArrayList<>();
+        boolean noMessage = true;
+        String message = new String();
         StringBuilder messageLine = new StringBuilder();
 
         // Autopatch does not consistently terminate all responses with cr, lf or crlf so readline doesn't work
@@ -174,39 +180,37 @@ public abstract class AutopatchBaseBridgeHandler extends BaseBridgeHandler {
         // Read multiple lines of data if there are multiple terminating characters found.
 
         if (dataInput != null) {
-            while (dataInput.ready() && (readint = dataInput.read()) != -1) {
+            while (noMessage) {
+                readint = dataInput.read();
+                if (readint == -1) {
+                    logger.debug("IP reader got unexpected end of input stream");
+                    throw new IOException("Unexpected end of stream");
+                }
                 switch (readchar = (char) readint) {
                     case '\r':
-                        // logger.trace("Ignoring cr from Autopatch");
                         break;
                     case '\n':
                         if (messageLine.length() > 0) {
                             logger.debug("Received message (lf terminated) from Autopatch (information) -->{}<--",
                                     messageLine.toString());
                             messageLine.setLength(0);
-                        } else {
-                            // logger.trace("Ignoring lf from Autopatch -->{}<--", readchar);
                         }
                         break;
                     case 'X': // General error
                     case '?': // Message Format error
                     case ')':
                         messageLine.append(readchar);
-                        // logger.trace("Appending message ('X' or ')' terminated) from Autopatch -->{}<--",
-                        // messageLine.toString());
-                        messages.add(messageLine.toString());
-                        messageLine.setLength(0);
+                        message = messageLine.toString();
+                        noMessage = false;
                         break;
                     default:
-                        // logger.trace("Appending raw data from Autopatch char: -->{}<-- Message: -->{}<--", readchar,
-                        // messageLine.toString());
                         messageLine.append(readchar);
                         break;
                 }
-                Thread.sleep(3); // slow it down a little due to the slow baud rate
+                Thread.sleep(5); // slow it down a little due to the slow baud rate
             }
         }
-        return messages;
+        return message;
     }
 
     protected void handleIncomingMessage(final String line) {
@@ -215,8 +219,8 @@ public abstract class AutopatchBaseBridgeHandler extends BaseBridgeHandler {
         if (!bcs.error) {
             logger.debug("Received message from Autopatch (valid) -->{}<--", line);
             // Handle changes for each zone, if multiple
-            for (int zoneindex = 0; zoneindex < bcs.zones.size(); zoneindex++) {
-                AutopatchBaseZoneHandler handler = findHandler(bcs.zonetype, bcs.zones.get(zoneindex), bcs.level);
+            for (int zoneindex = 0; zoneindex < bcs.getNumZones(); zoneindex++) {
+                AutopatchBaseZoneHandler handler = findHandler(bcs.zonetype, bcs.getZone(zoneindex), bcs.level);
                 if (handler != null) {
                     handler.handleStateChange(bcs, zoneindex);
                 }
@@ -261,63 +265,113 @@ public abstract class AutopatchBaseBridgeHandler extends BaseBridgeHandler {
                     break;
             }
         }
+    }
 
-        if (CHANNEL_COMMAND.equals(channelUID.getId()) && command.toString().equals("REBOOT")) {
-            sendCommand("~app!");
+    public synchronized void outputzoneStateChange(CommandType command, int zone) {
+        logger.trace("Trying to update Output Group Zones for change in {} in zone {}", command.toString(), zone);
+        for (Thing thing : getThing().getThings()) {
+            ThingHandler handler = thing.getHandler();
+            if (handler instanceof AutopatchOutputZoneGroupHandler groupHandler
+                    && groupHandler.getZonenumbers().contains(zone)) {
+                logger.trace("  Found OutputGroupZone {}", groupHandler.toString());
+                List<@NonNull AutopatchOutputZoneHandler> memberZones = getZoneHandlersFor(
+                        groupHandler.getZonenumbers());
+
+                if (command.equals(CommandType.MUTEZONE) || command.equals(CommandType.UNMUTEZONE)) {
+                    groupHandler.updateChannelState(CHANNEL_MUTE, computeMuteAgreement(memberZones));
+                } else if (command.equals(CommandType.VOLUME)) {
+                    groupHandler.updateChannelState(CHANNEL_VOLUME, computeVolumeAgreement(memberZones));
+                } else if (command.equals(CommandType.OUTPUTSWITCH)) {
+                    groupHandler.updateChannelState(CHANNEL_CONNECTEDINPUT,
+                            computeConnectedInputAgreement(memberZones));
+                }
+            }
         }
     }
 
-    protected void disconnect() {
-        try {
-            logger.trace("Disconnecting from Autopatch device.");
+    private List<@NonNull AutopatchOutputZoneHandler> getZoneHandlersFor(List<Integer> zoneNumbers) {
+        return getThing().getThings().stream().map(Thing::getHandler)
+                .filter(AutopatchOutputZoneHandler.class::isInstance).map(AutopatchOutputZoneHandler.class::cast)
+                .filter(zh -> zoneNumbers.contains(zh.zoneNumber))
+                .filter(zh -> zh.getThing().getStatus() == ThingStatus.ONLINE).toList();
+    }
 
-            if (dataInput != null) {
-                dataInput.close();
-            }
-
-            if (dataOutput != null) {
-                dataOutput.close();
-            }
-
-            if (messageSenderThread != null) {
-                messageSenderThread.interrupt();
-            }
-
-            if (this.keepAliveJob != null) {
-                this.keepAliveJob.cancel(true);
-            }
-
-            if (connectRetryJob != null) {
-                connectRetryJob.cancel(true);
-            }
-
-            if (this.keepAliveReconnectJob != null) {
-                // This method can be called from the keepAliveReconnect thread. Make sure
-                // we don't interrupt ourselves, as that may prevent the reconnection attempt.
-                this.keepAliveReconnectJob.cancel(false);
-            }
-
-        } catch (IOException e) {
-            logger.debug("Error closing reader/writer/port: {}", e.getMessage(), e);
+    private String computeMuteAgreement(List<@NonNull AutopatchOutputZoneHandler> zones) {
+        if (zones.isEmpty()) {
+            return "UNDEF";
         }
+        boolean allMuted = zones.stream().allMatch(zh -> zh.getMuteState() == OnOffType.ON);
+        boolean allUnmuted = zones.stream().allMatch(zh -> zh.getMuteState() == OnOffType.OFF);
+        if (allMuted) {
+            return "MUTED";
+        }
+        if (allUnmuted) {
+            return "UNMUTED";
+        }
+        return "MIXED";
+    }
 
+    private String computeVolumeAgreement(List<@NonNull AutopatchOutputZoneHandler> zones) {
+        if (zones.isEmpty()) {
+            return "UNDEF";
+        }
+        State first = zones.get(0).getVolumeState();
+        boolean allEqual = zones.stream().allMatch(zh -> zh.getVolumeState().equals(first));
+        return allEqual ? first.toString() : "MIXED";
+    }
+
+    private String computeConnectedInputAgreement(List<@NonNull AutopatchOutputZoneHandler> zones) {
+        if (zones.isEmpty()) {
+            return "UNDEF";
+        }
+        State first = zones.get(0).getConnectedInputState();
+        boolean allEqual = zones.stream().allMatch(zh -> zh.getConnectedInputState().equals(first));
+        return allEqual ? first.toString() : "MIXED";
+    }
+
+    protected void disconnect() {
+        logger.debug("Disconnecting from Autopatch device.");
+
+        closeStream(dataInput);
+        closeStream(dataOutput);
         dataInput = null;
         dataOutput = null;
+
+        if (messageSenderThread != null) {
+            messageSenderThread.interrupt();
+        }
+
+        if (this.keepAliveJob != null) {
+            this.keepAliveJob.cancel(true);
+        }
+
+        if (connectRetryJob != null) {
+            connectRetryJob.cancel(true);
+        }
+
+        if (this.keepAliveReconnectJob != null) {
+            // This method can be called from the keepAliveReconnect thread. Make sure
+            // we don't interrupt ourselves, as that may prevent the reconnection attempt.
+            this.keepAliveReconnectJob.cancel(false);
+        }
+
+    }
+
+    private void closeStream(AutoCloseable stream) {
+        try {
+            if (stream != null) {
+                stream.close();
+            }
+
+        } catch (Exception e) {
+            logger.debug("Error closing reader/writer/port: {}", e.getMessage(), e);
+        }
 
     }
 
     @Override
     public void dispose() {
         disconnect();
-        scheduledExecutorService.shutdown();
-
-        try {
-            if (!scheduledExecutorService.awaitTermination(800, TimeUnit.MILLISECONDS)) {
-                scheduledExecutorService.shutdownNow();
-            }
-        } catch (InterruptedException e) {
-            scheduledExecutorService.shutdownNow();
-        }
 
         super.dispose();
     }
