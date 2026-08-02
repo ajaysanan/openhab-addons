@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2010-2025 Contributors to the openHAB project
+ * Copyright (c) 2010-2026 Contributors to the openHAB project
  *
  * See the NOTICE file(s) distributed with this work for additional
  * information.
@@ -12,8 +12,6 @@
  */
 package org.openhab.binding.huesync.internal.i18n;
 
-import java.util.Locale;
-
 import org.eclipse.jdt.annotation.NonNullByDefault;
 import org.openhab.core.i18n.TranslationProvider;
 import org.osgi.framework.Bundle;
@@ -24,26 +22,41 @@ import org.osgi.framework.ServiceReference;
 /**
  * 
  * @author Patrik Gfeller - Initial Contribution
+ * @author Patrik Gfeller - Issue #18376, Exception message is not resolved using language resource strings
  */
 @NonNullByDefault
 public class ResourceHelper {
-    private static final Locale LOCALE = Locale.ENGLISH;
-    private static final BundleContext BUNDLE_CONTEXT = FrameworkUtil.getBundle(ResourceHelper.class)
-            .getBundleContext();
-    private static final ServiceReference<TranslationProvider> SERVICE_REFERENCE = BUNDLE_CONTEXT
-            .getServiceReference(TranslationProvider.class);
-    private static final Bundle BUNDLE = BUNDLE_CONTEXT.getBundle();
-
+    @SuppressWarnings("null")
     public static String getResourceString(String key) {
         String lookupKey = key.replace("@text/", "");
 
         String missingKey = "Missing Translation: " + key;
 
-        String result = (BUNDLE_CONTEXT
-                .getService(SERVICE_REFERENCE) instanceof TranslationProvider translationProvider)
-                        ? translationProvider.getText(BUNDLE, lookupKey, missingKey, LOCALE)
-                        : missingKey;
+        Bundle bundle = FrameworkUtil.getBundle(ResourceHelper.class);
+        if (bundle == null) {
+            return missingKey;
+        }
 
-        return result == null ? missingKey : result;
+        BundleContext context = bundle.getBundleContext();
+        if (context == null) {
+            return missingKey;
+        }
+
+        ServiceReference<TranslationProvider> ref = context.getServiceReference(TranslationProvider.class);
+        if (ref == null) {
+            return missingKey;
+        }
+
+        TranslationProvider provider = context.getService(ref);
+        if (provider == null) {
+            return missingKey;
+        }
+
+        try {
+            String localizedString = provider.getText(bundle, lookupKey, missingKey, null);
+            return localizedString == null ? missingKey : localizedString;
+        } finally {
+            context.ungetService(ref);
+        }
     }
 }

@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2010-2025 Contributors to the openHAB project
+ * Copyright (c) 2010-2026 Contributors to the openHAB project
  *
  * See the NOTICE file(s) distributed with this work for additional
  * information.
@@ -133,6 +133,10 @@ public class AmsDeviceHandler extends BaseThingHandler {
         var state = switch (channel) {
             case CHANNEL_TRAY_TYPE -> //
                 key.flatMap(name -> {
+                    if (name.isBlank()) {
+                        logger.debug("Tray type is blank");
+                        return Optional.empty();
+                    }
                     var trayType = AmsChannel.TrayType.findTrayType(name);
                     if (trayType.isEmpty()) {
                         var msg = "Cannot parse tray type from [{}]! Please report this on https://github.com/openhab/openhab-addons .";
@@ -144,7 +148,7 @@ public class AmsDeviceHandler extends BaseThingHandler {
                     }
                     return trayType;
                 })//
-                        .map(Enum::name)//
+                        .map(AmsChannel.TrayType::getTypeName)//
                         .map(value -> (State) StringType.valueOf(value));
             case CHANNEL_TRAY_COLOR -> key.map(StateParserHelper::parseColor);
             case CHANNEL_NOZZLE_TEMPERATURE_MAX -> key.flatMap(StateParserHelper::parseTemperatureType);

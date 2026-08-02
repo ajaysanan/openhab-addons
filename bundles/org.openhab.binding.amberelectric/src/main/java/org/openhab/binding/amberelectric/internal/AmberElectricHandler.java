@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2010-2025 Contributors to the openHAB project
+ * Copyright (c) 2010-2026 Contributors to the openHAB project
  *
  * See the NOTICE file(s) distributed with this work for additional
  * information.
@@ -14,17 +14,14 @@ package org.openhab.binding.amberelectric.internal;
 
 import static org.openhab.core.types.TimeSeries.Policy.REPLACE;
 
-import java.io.IOException;
 import java.time.Instant;
 import java.util.Map;
-import java.util.concurrent.Future;
-import java.util.concurrent.ScheduledFuture;
-import java.util.concurrent.TimeUnit;
 
 import javax.measure.Unit;
 
 import org.eclipse.jdt.annotation.NonNullByDefault;
 import org.eclipse.jdt.annotation.Nullable;
+import org.eclipse.jetty.client.HttpClient;
 import org.openhab.binding.amberelectric.internal.api.CurrentPrices;
 import org.openhab.binding.amberelectric.internal.api.Sites;
 import org.openhab.core.config.core.Configuration;
@@ -33,6 +30,8 @@ import org.openhab.core.library.types.OnOffType;
 import org.openhab.core.library.types.QuantityType;
 import org.openhab.core.library.types.StringType;
 import org.openhab.core.library.unit.CurrencyUnits;
+import org.openhab.core.scheduler.CronScheduler;
+import org.openhab.core.scheduler.ScheduledCompletableFuture;
 import org.openhab.core.thing.ChannelUID;
 import org.openhab.core.thing.Thing;
 import org.openhab.core.thing.ThingStatus;
@@ -59,19 +58,22 @@ public class AmberElectricHandler extends BaseThingHandler {
 
     private final Logger logger = LoggerFactory.getLogger(AmberElectricHandler.class);
 
-    private long refreshInterval;
     private String apiKey = "";
     private String nmi = "";
     private String siteID = "";
+    private boolean isEstimate = true;
 
     private @NonNullByDefault({}) AmberElectricConfiguration config;
     private @NonNullByDefault({}) AmberElectricWebTargets webTargets;
-    private @Nullable ScheduledFuture<?> pollFuture;
-
+    private final CronScheduler cronScheduler;
+    private @Nullable ScheduledCompletableFuture<?> cronPollJob;
+    private @Nullable ScheduledCompletableFuture<?> cronResetEstimatesJob;
     private Gson gson = new Gson();
 
-    public AmberElectricHandler(Thing thing) {
+    public AmberElectricHandler(Thing thing, CronScheduler cronScheduler, HttpClient httpClient) {
         super(thing);
+        this.cronScheduler = cronScheduler;
+        webTargets = new AmberElectricWebTargets(httpClient);
     }
 
     @Override
@@ -88,9 +90,7 @@ public class AmberElectricHandler extends BaseThingHandler {
             return;
         }
 
-        webTargets = new AmberElectricWebTargets();
         updateStatus(ThingStatus.UNKNOWN);
-        refreshInterval = config.refresh;
         nmi = config.nmi;
         apiKey = config.apiKey;
 
@@ -104,29 +104,45 @@ public class AmberElectricHandler extends BaseThingHandler {
     }
 
     private void schedulePoll() {
-        logger.debug("Scheduling poll every {} s", refreshInterval);
-        this.pollFuture = scheduler.scheduleWithFixedDelay(this::poll, 0, refreshInterval, TimeUnit.SECONDS);
+        ScheduledCompletableFuture<?> cronPollJob = this.cronPollJob;
+        if (cronPollJob == null || cronPollJob.isDone()) {
+            this.cronPollJob = cronScheduler.schedule(this::poll,
+                    "1,14,16,18,19,21,23,25,27,30,32,35,40,45,50,55 */5 * * * ?");
+        }
+        ScheduledCompletableFuture<?> cronResetEstimatesJob = this.cronResetEstimatesJob;
+        if (cronResetEstimatesJob == null || cronResetEstimatesJob.isDone()) {
+            this.cronResetEstimatesJob = cronScheduler.schedule(this::resetEstimateFlag, "0 */5 * * * ?");
+        }
     }
 
     private void poll() {
-        try {
-            logger.debug("Polling for state");
-            pollStatus();
-        } catch (IOException e) {
-            logger.debug("Could not connect to AmberAPI", e);
-            updateStatus(ThingStatus.OFFLINE, ThingStatusDetail.COMMUNICATION_ERROR, e.getMessage());
-        } catch (RuntimeException e) {
-            logger.warn("Unexpected error connecting to AmberAPI", e);
-            updateStatus(ThingStatus.OFFLINE, ThingStatusDetail.COMMUNICATION_ERROR, e.getMessage());
+        if (isEstimate) {
+            try {
+                logger.debug("CurrentPrice is estimated, polling for state");
+                pollStatus();
+            } catch (RuntimeException e) {
+                logger.warn("Unexpected error connecting to AmberAPI", e);
+                updateStatus(ThingStatus.OFFLINE, ThingStatusDetail.COMMUNICATION_ERROR, e.getMessage());
+            }
         }
     }
 
     private void stopPoll() {
-        final Future<?> future = pollFuture;
-        if (future != null) {
-            future.cancel(true);
-            pollFuture = null;
+        ScheduledCompletableFuture<?> cronPollJob = this.cronPollJob;
+        if (cronPollJob != null) {
+            cronPollJob.cancel(true);
+            this.cronPollJob = null;
         }
+        ScheduledCompletableFuture<?> cronResetEstimatesJob = this.cronResetEstimatesJob;
+        if (cronResetEstimatesJob != null) {
+            cronResetEstimatesJob.cancel(true);
+            this.cronResetEstimatesJob = null;
+        }
+    }
+
+    private void resetEstimateFlag() {
+        isEstimate = true;
+        updateState(AmberElectricBindingConstants.CHANNEL_ESTIMATE, OnOffType.from(isEstimate));
     }
 
     private State convertPriceToState(double price) {
@@ -135,24 +151,34 @@ public class AmberElectricHandler extends BaseThingHandler {
         return (unit == null) ? new DecimalType(price / 100) : new QuantityType<>(price / 100 + " " + electricityUnit);
     }
 
-    private void pollStatus() throws IOException {
+    private void pollStatus() {
         try {
-            if ("".equals(siteID)) {
+            if (siteID == null || siteID.isBlank()) {
                 String responseSites = webTargets.getSites(apiKey);
                 logger.trace("responseSites = {}", responseSites);
-                JsonArray jsonArraySites = JsonParser.parseString(responseSites).getAsJsonArray();
+                var jsonArraySites = JsonParser.parseString(responseSites).getAsJsonArray();
                 Sites sites = new Sites();
-                for (int i = 0; i < jsonArraySites.size(); i++) {
-                    sites = gson.fromJson(jsonArraySites.get(i), Sites.class);
-                    if (sites == null) {
-                        return;
-                    }
-                    if (nmi.equals(sites.nmi)) {
-                        siteID = sites.id;
+                for (var element : jsonArraySites) {
+                    var site = gson.fromJson(element, Sites.class);
+                    if (site == null)
+                        continue;
+
+                    if (nmi.equals(site.nmi)) {
+                        sites = site;
+                        siteID = site.id;
+                        break;
                     }
                 }
-                if ("".equals(nmi) || "".equals(siteID)) { // nmi not specified, or not found so we take the first
-                                                           // siteid found
+                if (nmi == null || nmi.isBlank() || siteID == null || siteID.isBlank()) { // nmi not specified, or not
+                                                                                          // found so we take the first
+                    // siteid found
+                    if (jsonArraySites.isEmpty()) {
+                        logger.warn(
+                                "Amber API returned an empty sites list. Check API key permissions or active accounts.");
+                        updateStatus(ThingStatus.OFFLINE, ThingStatusDetail.COMMUNICATION_ERROR,
+                                "@text/offline.comm-error.no-sites");
+                        return;
+                    }
                     sites = gson.fromJson(jsonArraySites.get(0), Sites.class);
                     if (sites == null) {
                         return;
@@ -179,8 +205,8 @@ public class AmberElectricHandler extends BaseThingHandler {
             String response = webTargets.getCurrentPrices(siteID, apiKey);
             JsonArray jsonArray = JsonParser.parseString(response).getAsJsonArray();
             CurrentPrices currentPrices;
-            TimeSeries elecTimeSeries = new TimeSeries(REPLACE);
-            TimeSeries feedInTimeSeries = new TimeSeries(REPLACE);
+            var elecTimeSeries = new TimeSeries(REPLACE);
+            var feedInTimeSeries = new TimeSeries(REPLACE);
 
             for (int i = 0; i < jsonArray.size(); i++) {
                 currentPrices = gson.fromJson(jsonArray.get(i), CurrentPrices.class);
@@ -195,6 +221,9 @@ public class AmberElectricHandler extends BaseThingHandler {
                                 new DecimalType(currentPrices.renewables));
                         updateState(AmberElectricBindingConstants.CHANNEL_SPIKE,
                                 OnOffType.from(!"none".equals(currentPrices.spikeStatus)));
+                        updateState(AmberElectricBindingConstants.CHANNEL_ESTIMATE,
+                                OnOffType.from(currentPrices.estimate));
+                        isEstimate = currentPrices.estimate;
                         updateState(AmberElectricBindingConstants.CHANNEL_ELECTRICITY_PRICE,
                                 convertPriceToState(currentPrices.perKwh));
                         elecTimeSeries.add(instantStart, convertPriceToState(currentPrices.perKwh));
@@ -216,13 +245,16 @@ public class AmberElectricHandler extends BaseThingHandler {
                             && "controlledLoad".equals(currentPrices.channelType)) {
                         updateState(AmberElectricBindingConstants.CHANNEL_CONTROLLED_LOAD_STATUS,
                                 new StringType(currentPrices.descriptor));
-                        updateState(AmberElectricBindingConstants.CHANNEL_CONTROLLED_LOAD_STATUS,
+                        updateState(AmberElectricBindingConstants.CHANNEL_CONTROLLED_LOAD_PRICE,
                                 convertPriceToState(currentPrices.perKwh));
                     }
                 }
             }
-            sendTimeSeries(AmberElectricBindingConstants.CHANNEL_ELECTRICITY_PRICE, elecTimeSeries);
-            sendTimeSeries(AmberElectricBindingConstants.CHANNEL_FEED_IN_PRICE, feedInTimeSeries);
+            // Only update TimeSeries once price has been confirmed
+            if (!isEstimate) {
+                sendTimeSeries(AmberElectricBindingConstants.CHANNEL_ELECTRICITY_PRICE, elecTimeSeries);
+                sendTimeSeries(AmberElectricBindingConstants.CHANNEL_FEED_IN_PRICE, feedInTimeSeries);
+            }
         } catch (AmberElectricCommunicationException e) {
             logger.debug("Unexpected error connecting to Amber Electric API", e);
             updateStatus(ThingStatus.OFFLINE, ThingStatusDetail.COMMUNICATION_ERROR, e.getMessage());
