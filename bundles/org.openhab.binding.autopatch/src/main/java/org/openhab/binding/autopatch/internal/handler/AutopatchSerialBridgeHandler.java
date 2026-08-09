@@ -64,7 +64,7 @@ public class AutopatchSerialBridgeHandler extends AutopatchBaseBridgeHandler {
     // have to poll; cannot just attach a listener because the serial libraries don't work properly with it
     protected @Nullable ScheduledFuture<?> reader;
 
-    private boolean deviceIsConnected = false;
+    // private boolean deviceIsConnected = false;
 
     public AutopatchSerialBridgeHandler(Bridge bridge, final @Reference SerialPortManager serialPortManager,
             ThingRegistry thingRegistry) {
@@ -75,31 +75,23 @@ public class AutopatchSerialBridgeHandler extends AutopatchBaseBridgeHandler {
 
     @Override
     public void initialize() {
-        logger.debug("Initializing the Autopatch serial port handler");
+        this.configuration = getConfigAs(AutopatchSerialBridgeConfig.class);
 
-        configuration = getConfigAs(AutopatchSerialBridgeConfig.class);
+        this.serialPortName = configuration.getSerialPort();
+        this.pollInterval = configuration.getPollInterval();
 
-        serialPortName = configuration.getSerialPort();
-        reconnectInterval = configuration.getRefreshInterval();
-        pollInterval = configuration.getPollInterval();
-        sendDelay = configuration.getSendDelay();
-
-        if (validConfiguration(configuration)) {
-            updateStatus(ThingStatus.UNKNOWN, ThingStatusDetail.NONE, "Connecting");
-
-            // start the async connect task
-            scheduler.execute(() -> connect());
-        }
-
+        commonInitialize(configuration.getRefreshInterval(), configuration.getSendDelay(),
+                configuration.getDeviceType());
     }
 
-    private boolean validConfiguration(AutopatchSerialBridgeConfig config) {
-        if (isDuplicateBridge(config)) {
+    @Override
+    protected boolean validConfiguration() {
+        if (isDuplicateBridge(configuration)) {
             updateStatus(ThingStatus.OFFLINE, ThingStatusDetail.CONFIGURATION_ERROR, "Duplicate bridge.");
             return false;
         }
 
-        if (serialPortName == "") {
+        if (configuration.getSerialPort().isEmpty()) {
             updateStatus(ThingStatus.OFFLINE, ThingStatusDetail.CONFIGURATION_ERROR, "Serial port not specified");
             return false;
         }
@@ -108,9 +100,15 @@ public class AutopatchSerialBridgeHandler extends AutopatchBaseBridgeHandler {
 
     @Override
     protected synchronized void connect() {
-        logger.debug("Autopatch RS232 Handler Connecting with Serial Port: {}.", serialPortName);
+        logger.debug("Autopatch RS232 Handler {} Connecting with Serial Port: {}.", System.identityHashCode(this),
+                serialPortName);
 
-        if (deviceIsConnected) {
+        if (isDisposed) {
+            logger.trace("Thing is disposed; ignoring connection attempt");
+            return;
+        }
+
+        if (isConnected) {
             logger.trace("Device already connected; ignoring repeat connection");
             return;
         }
@@ -120,6 +118,8 @@ public class AutopatchSerialBridgeHandler extends AutopatchBaseBridgeHandler {
             try {
                 this.serialPort = portIdentifier.open(this.getClass().getName(), 2000);
                 logger.debug("Connection established using {}.  Configuring IO parameters. ", serialPortName);
+
+                isConnected = true;
 
                 Objects.requireNonNull(serialPort);
                 serialPort.setSerialPortParams(9600, SerialPort.DATABITS_8, SerialPort.STOPBITS_1,
@@ -133,17 +133,21 @@ public class AutopatchSerialBridgeHandler extends AutopatchBaseBridgeHandler {
                 logger.debug("Starting data poll job with interval {} seconds", pollInterval);
                 reader = scheduler.scheduleWithFixedDelay(this::checkData, pollInterval, pollInterval,
                         TimeUnit.SECONDS);
-                deviceIsConnected = true;
+
                 super.connect();
             } catch (PortInUseException portInUseException) {
                 updateStatus(ThingStatus.OFFLINE, ThingStatusDetail.COMMUNICATION_ERROR,
                         "Port in use: " + serialPortName);
                 disconnect();
-                scheduleConnectRetry(reconnectInterval); // Possibly a temporary problem. Try again later.
+                if (!isDisposed) {
+                    scheduleConnectRetry(reconnectInterval);
+                }
             } catch (UnsupportedCommOperationException | IOException e) {
                 updateStatus(ThingStatus.OFFLINE, ThingStatusDetail.COMMUNICATION_ERROR, "Communication error");
                 disconnect();
-                scheduleConnectRetry(reconnectInterval); // Possibly a temporary problem. Try again later.
+                if (!isDisposed) {
+                    scheduleConnectRetry(reconnectInterval);
+                }
             }
         } else {
             updateStatus(ThingStatus.OFFLINE, ThingStatusDetail.COMMUNICATION_ERROR, "Invalid port: " + serialPortName);
@@ -155,7 +159,7 @@ public class AutopatchSerialBridgeHandler extends AutopatchBaseBridgeHandler {
         try {
 
             String data = getData();
-            if (data != "") {
+            if (!data.isEmpty()) {
                 // System is connected in some way, cancel reconnect task.
                 if (this.keepAliveReconnectJob != null) {
                     this.keepAliveReconnectJob.cancel(true);
@@ -173,7 +177,13 @@ public class AutopatchSerialBridgeHandler extends AutopatchBaseBridgeHandler {
     }
 
     @Override
-    public void disconnect() {
+    public synchronized void disconnect() {
+        if (!isConnected) {
+            logger.trace("Already disconnected; ignoring redundant disconnect() call");
+            return;
+        }
+        isConnected = false;
+
         logger.info("Autopatch serial port being closed.");
 
         if (serialPort != null) {
@@ -185,24 +195,14 @@ public class AutopatchSerialBridgeHandler extends AutopatchBaseBridgeHandler {
             this.reader.cancel(true);
         }
 
-        deviceIsConnected = false;
-
         logger.debug("Finished closing serial port.");
 
         super.disconnect();
     }
 
     @Override
-    protected synchronized void reconnect() {
-        logger.debug("Keepalive timeout, attempting to reconnect to the bridge");
-
-        updateStatus(ThingStatus.OFFLINE, ThingStatusDetail.DUTY_CYCLE);
-        disconnect();
-        connect();
-    }
-
-    @Override
-    public void dispose() {
+    public synchronized void dispose() {
+        logger.trace("Disposing SerialBridgeHandler {}", System.identityHashCode(this));
         this.disconnect();
         super.dispose();
     }
@@ -220,6 +220,29 @@ public class AutopatchSerialBridgeHandler extends AutopatchBaseBridgeHandler {
         }
         logger.debug("Scheduling connection retry in {} minutes", waitMinutes);
         connectRetryJob = scheduler.schedule(this::connect, waitMinutes, TimeUnit.MINUTES);
+    }
+
+    @Override
+    public void thingUpdated(Thing thing) {
+        AutopatchSerialBridgeConfig newConfig = getConfigAs(AutopatchSerialBridgeConfig.class);
+        AutopatchSerialBridgeConfig oldConfig = this.configuration;
+
+        this.configuration = newConfig;
+        this.serialPortName = newConfig.getSerialPort();
+        this.pollInterval = newConfig.getPollInterval();
+
+        boolean validConfig = validConfiguration();
+        boolean needsReconnect = validConfig && !oldConfig.sameConnectionParameters(newConfig);
+
+        if (!validConfig || needsReconnect) {
+            dispose();
+        }
+
+        this.thing = thing;
+
+        if (needsReconnect) {
+            initialize();
+        }
     }
 
 }

@@ -31,7 +31,7 @@ public class AutopatchBaseBridgeConfig {
     private static final int DEFAULT_POLL_SECONDS = 5;
 
     public String getDeviceType() {
-        return (deviceType == null ? "PrecisDSP1818" : deviceType);
+        return (deviceType == null ? "autodetect" : deviceType);
     }
 
     public int getRefreshInterval() {

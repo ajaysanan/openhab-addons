@@ -69,14 +69,16 @@ public abstract class AutopatchBaseZoneHandler extends BaseThingHandler {
         zoneNumber = configuration.getNumber();
         zoneLevel = configuration.getLevel();
 
-        if (!repeatedZone(configuration)) {
-            logger.debug("Initializing Autopatch {} zone {}:{}", zoneType.toString(), zoneNumber, zoneName);
-
-            updateStatus(ThingStatus.ONLINE, ThingStatusDetail.NONE);
-            // Delay a bit to allow the slow serial bridge to initially connect
-            scheduler.schedule(() -> refreshAllChannels(), 3000, TimeUnit.MILLISECONDS);
-        } else {
+        if (repeatedZone(configuration)) {
             updateStatus(ThingStatus.OFFLINE, ThingStatusDetail.CONFIGURATION_ERROR, "Duplicate Zone Number");
+            return;
+        }
+
+        logger.debug("Initializing Autopatch {} zone {}:{}", zoneType.toString(), zoneNumber, zoneName);
+
+        Bridge bridge = getBridge();
+        if (bridge != null && bridge.getStatus() == ThingStatus.ONLINE) {
+            finalizeZoneStatus();
         }
     }
 
@@ -121,14 +123,34 @@ public abstract class AutopatchBaseZoneHandler extends BaseThingHandler {
 
     @Override
     public void bridgeStatusChanged(ThingStatusInfo bridgeStatusInfo) {
-        if (bridgeStatusInfo.getStatus().equals(ThingStatus.ONLINE)
-                && getThing().getStatusInfo().getStatusDetail().equals(ThingStatusDetail.BRIDGE_OFFLINE)) {
-            updateStatus(ThingStatus.ONLINE, ThingStatusDetail.NONE);
-            logger.debug("Bridge Status changed to Online so refreshing Input Zone channels");
-            refreshAllChannels();
+        if (bridgeStatusInfo.getStatus().equals(ThingStatus.ONLINE)) {
+            finalizeZoneStatus();
         } else if (bridgeStatusInfo.getStatus().equals(ThingStatus.OFFLINE)) {
             updateStatus(ThingStatus.OFFLINE, ThingStatusDetail.BRIDGE_OFFLINE);
         }
+    }
+
+    protected void finalizeZoneStatus() {
+        AutopatchBaseBridgeHandler bridgeHandler = getBridgeHandler();
+        if (bridgeHandler == null) {
+            return;
+        }
+
+        int maxZones = zoneType == ZoneType.INPUT ? bridgeHandler.numInputZones : bridgeHandler.numOutputZones;
+        if (maxZones == 0) {
+            // Bridge is online but hasn't resolved zone counts yet (autodetect in progress); wait.
+            return;
+        }
+
+        if (zoneNumber < 1 || zoneNumber > maxZones) {
+            updateStatus(ThingStatus.OFFLINE, ThingStatusDetail.CONFIGURATION_ERROR,
+                    "Zone number " + zoneNumber + " exceeds detected router capacity (" + maxZones + ")");
+            return;
+        }
+
+        updateStatus(ThingStatus.ONLINE, ThingStatusDetail.NONE);
+        logger.debug("Bridge online and zone bounds valid; refreshing zone {} channels", zoneNumber);
+        refreshAllChannels();
     }
 
     public void zoneCommand(ChannelUID channelUID, Command command) {

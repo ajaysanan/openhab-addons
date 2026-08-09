@@ -26,6 +26,8 @@ import java.util.concurrent.LinkedBlockingQueue;
 import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.ScheduledFuture;
 import java.util.concurrent.TimeUnit;
+import java.util.regex.Matcher;
+import java.util.regex.Pattern;
 
 import org.eclipse.jdt.annotation.NonNull;
 import org.eclipse.jdt.annotation.Nullable;
@@ -60,14 +62,22 @@ import org.slf4j.LoggerFactory;
 public abstract class AutopatchBaseBridgeHandler extends BaseBridgeHandler {
     private static final long KEEPALIVE_TIMEOUT_SECONDS = 30;
     private static final String TEST_COMMAND = "SO1T";
+    private static final Pattern ZONE_PATTERN = Pattern.compile("(\\d+)x(\\d+)$");
+    private static final Pattern VM_DIM_PATTERN = Pattern.compile("\\[(\\d+)x(\\d+)x\\d+\\]");
+    private static final Pattern BUILD_PATTERN = Pattern.compile("Built on\\s*(.+)");
+    private static final Pattern HOST_PATTERN = Pattern.compile("Host software:\\s*(\\S+)");
+    private static final Pattern HW_PATTERN = Pattern.compile("Hardware driver:\\s*(.+)");
 
     private final Logger logger = LoggerFactory.getLogger(AutopatchBaseBridgeHandler.class);
 
     public boolean isConnected = false;
-    public int numInputZones = 18;
-    public int numOutputZones = 18;
+    public int numInputZones = 0;
+    public int numOutputZones = 0;
+    public boolean dspCapable = false;
 
     protected int reconnectInterval;
+    protected String deviceType;
+    protected int sendDelay;
 
     protected ScheduledExecutorService scheduledExecutorService = ThreadPoolManager
             .getScheduledPool("autopatchHandler-" + thingID());
@@ -85,21 +95,55 @@ public abstract class AutopatchBaseBridgeHandler extends BaseBridgeHandler {
     private @Nullable Thread messageSenderThread;
 
     protected OutputStreamWriter dataOutput;
-    protected @Nullable BufferedReader dataInput;
+    protected @Nullable volatile BufferedReader dataInput;
 
     private BlockingQueue<String> sendQueue = new LinkedBlockingQueue<>();
-    protected int sendDelay;
+
+    protected volatile boolean isDisposed = false;
 
     public AutopatchBaseBridgeHandler(Bridge bridge) {
         super(bridge);
+    }
+
+    protected void commonInitialize(int refreshInterval, int sendDelay, String deviceType) {
+        this.reconnectInterval = refreshInterval;
+        this.sendDelay = sendDelay;
+        this.deviceType = deviceType;
+
+        if (!"autodetect".equals(deviceType)) {
+            Matcher zoneMatcher = ZONE_PATTERN.matcher(deviceType);
+
+            if (zoneMatcher.find()) {
+                this.numInputZones = Integer.parseInt(zoneMatcher.group(1));
+                this.numOutputZones = Integer.parseInt(zoneMatcher.group(2));
+
+                Map<@NonNull String, @NonNull String> props = editProperties();
+                props.put("Signal Router", deviceType);
+                props.put("Number of Input Zones", zoneMatcher.group(1));
+                props.put("Number of Output Zones", zoneMatcher.group(2));
+                updateProperties(props);
+                this.dspCapable = DSP_CAPABLE_ROUTERS.contains(deviceType);
+                notifyZonesOfConfiguration();
+            } else {
+                logger.warn("deviceType '{}' does not end in IxO - cannot determine zone counts", deviceType);
+            }
+        }
+
+        if (validConfiguration()) {
+            getHostInterface();
+            updateStatus(ThingStatus.UNKNOWN, ThingStatusDetail.NONE, "Connecting");
+
+            logger.info("Starting the async connect task");
+            scheduler.execute(this::connect);
+        }
     }
 
     protected void connect() {
         messageSenderThread = new Thread(this::sendCommandThread, "Autopatch sender");
         messageSenderThread.start();
 
-        @NonNull
         Map<@NonNull String, @NonNull String> props = this.editProperties();
+        props.putIfAbsent("Signal Router", "");
         props.putIfAbsent("Connection Date", LocalDate.now().toString());
         String connects = props.putIfAbsent("Connection Attempts", "1");
         if (connects != null) {
@@ -108,20 +152,20 @@ public abstract class AutopatchBaseBridgeHandler extends BaseBridgeHandler {
         }
         this.updateProperties(props);
 
-        logger.debug("Queuing diagnostics command (~scr).");
-        sendCommand("~scr!");
+        logger.debug("Sending test query and Queuing diagnostics command ({}).", TEST_COMMAND);
+        sendCommand(TEST_COMMAND);
 
-        logger.debug("Starting keepAlive job with interval {} minutes", reconnectInterval);
-        keepAliveJob = scheduledExecutorService.scheduleWithFixedDelay(this::sendKeepAlive, 1, reconnectInterval,
-                TimeUnit.MINUTES);
     }
 
     protected void sendKeepAlive() {
-        logger.trace("Scheduling keepalive reconnect job for {} seconds", KEEPALIVE_TIMEOUT_SECONDS);
-        // Reconnect if no response is received within specified seconds.
-        keepAliveReconnectJob = scheduledExecutorService.schedule(this::reconnect, KEEPALIVE_TIMEOUT_SECONDS,
-                TimeUnit.SECONDS);
-        sendCommand(TEST_COMMAND);
+        if (!isDisposed) {
+            logger.trace("Scheduling keepalive reconnect job for {} seconds ({})", KEEPALIVE_TIMEOUT_SECONDS,
+                    System.identityHashCode(this));
+            // Reconnect if no response is received within specified seconds.
+            keepAliveReconnectJob = scheduledExecutorService.schedule(this::reconnect, KEEPALIVE_TIMEOUT_SECONDS,
+                    TimeUnit.SECONDS);
+            sendCommand(TEST_COMMAND);
+        }
     }
 
     public void sendCommand(String command) {
@@ -165,7 +209,7 @@ public abstract class AutopatchBaseBridgeHandler extends BaseBridgeHandler {
 
     }
 
-    public synchronized String getData() throws IOException, InterruptedException {
+    public String getData() throws IOException, InterruptedException {
         logger.trace("IP reader waiting for available data");
         final BufferedReader dataInput = this.dataInput;
 
@@ -193,6 +237,7 @@ public abstract class AutopatchBaseBridgeHandler extends BaseBridgeHandler {
                         if (messageLine.length() > 0) {
                             logger.debug("Received message (lf terminated) from Autopatch (information) -->{}<--",
                                     messageLine.toString());
+                            processInformationMessage(messageLine.toString());
                             messageLine.setLength(0);
                         }
                         break;
@@ -213,11 +258,70 @@ public abstract class AutopatchBaseBridgeHandler extends BaseBridgeHandler {
         return message;
     }
 
+    protected void processInformationMessage(String line) {
+        Map<@NonNull String, @NonNull String> props = editProperties();
+        boolean autodetect = "autodetect".equals(this.deviceType);
+        boolean changed = false;
+
+        if (autodetect) {
+            int sigRouterIdx = line.toLowerCase().indexOf("signal router");
+            if (sigRouterIdx >= 0) {
+                String signalRouter = line.substring(0, sigRouterIdx).trim();
+                props.put("Signal Router", signalRouter);
+                this.dspCapable = signalRouter.toUpperCase().contains("DSP");
+                changed = true;
+            }
+
+            Matcher vmDimMatcher = VM_DIM_PATTERN.matcher(line);
+            if (vmDimMatcher.find()) {
+                this.numInputZones = Integer.parseInt(vmDimMatcher.group(1));
+                this.numOutputZones = Integer.parseInt(vmDimMatcher.group(2));
+                props.put("Number of Input Zones", vmDimMatcher.group(1));
+                props.put("Number of Output Zones", vmDimMatcher.group(2));
+                notifyZonesOfConfiguration();
+                changed = true;
+            }
+        }
+
+        Matcher buildMatcher = BUILD_PATTERN.matcher(line);
+        if (buildMatcher.find()) {
+            props.put("Build Date", buildMatcher.group(1).trim());
+            changed = true;
+        }
+
+        Matcher hostMatcher = HOST_PATTERN.matcher(line);
+        if (hostMatcher.find()) {
+            props.put("Software Version", hostMatcher.group(1).trim());
+            changed = true;
+        }
+
+        Matcher hwMatcher = HW_PATTERN.matcher(line);
+        if (hwMatcher.find()) {
+            props.put("Hardware Version", hwMatcher.group(1).trim());
+            changed = true;
+        }
+
+        if (changed) {
+            updateProperties(props);
+        }
+    }
+
     protected void handleIncomingMessage(final String line) {
         // Send response to BCSDecode class to decode
         BCSDecode bcs = new BCSDecode(line);
         if (!bcs.error) {
             logger.debug("Received message from Autopatch (valid) -->{}<--", line);
+            if (getThing().getStatus() != ThingStatus.ONLINE) {
+                updateStatus(ThingStatus.ONLINE);
+                logger.debug("Queuing diagnostics command (~scr).");
+                sendCommand("~scr!");
+
+                if (!isDisposed && keepAliveJob == null) {
+                    logger.debug("Starting keepAlive job with interval {} minutes", reconnectInterval);
+                    keepAliveJob = scheduledExecutorService.scheduleWithFixedDelay(this::sendKeepAlive,
+                            reconnectInterval, reconnectInterval, TimeUnit.MINUTES);
+                }
+            }
             // Handle changes for each zone, if multiple
             for (int zoneindex = 0; zoneindex < bcs.getNumZones(); zoneindex++) {
                 AutopatchBaseZoneHandler handler = findHandler(bcs.zonetype, bcs.getZone(zoneindex), bcs.level);
@@ -237,6 +341,11 @@ public abstract class AutopatchBaseBridgeHandler extends BaseBridgeHandler {
                 .filter(handler -> zonetype.equals(handler.zoneType)
                         && (zone.equals(handler.zoneNumber) && (handler.zoneLevel.equals(level))))
                 .findFirst().orElse(null);
+    }
+
+    protected void notifyZonesOfConfiguration() {
+        getThing().getThings().stream().map(Thing::getHandler).filter(AutopatchBaseZoneHandler.class::isInstance)
+                .map(AutopatchBaseZoneHandler.class::cast).forEach(AutopatchBaseZoneHandler::finalizeZoneStatus);
     }
 
     @Override
@@ -343,18 +452,20 @@ public abstract class AutopatchBaseBridgeHandler extends BaseBridgeHandler {
 
         if (this.keepAliveJob != null) {
             this.keepAliveJob.cancel(true);
+            this.keepAliveJob = null;
         }
 
         if (connectRetryJob != null) {
             connectRetryJob.cancel(true);
+            connectRetryJob = null;
         }
 
         if (this.keepAliveReconnectJob != null) {
             // This method can be called from the keepAliveReconnect thread. Make sure
             // we don't interrupt ourselves, as that may prevent the reconnection attempt.
             this.keepAliveReconnectJob.cancel(false);
+            this.keepAliveReconnectJob = null;
         }
-
     }
 
     private void closeStream(AutoCloseable stream) {
@@ -393,6 +504,21 @@ public abstract class AutopatchBaseBridgeHandler extends BaseBridgeHandler {
         return s.substring(s.indexOf(':') + 1);
     }
 
-    protected abstract void reconnect();
+    protected synchronized void reconnect() {
+        if (!isDisposed) {
+            logger.info("Keepalive timeout, attempting to reconnect to the bridge");
+
+            updateStatus(ThingStatus.OFFLINE, ThingStatusDetail.DUTY_CYCLE);
+
+            disconnect();
+            connect();
+        }
+
+    }
+
+    protected abstract boolean validConfiguration();
+
+    protected void getHostInterface() {
+    }
 
 }

@@ -61,7 +61,7 @@ public class AutopatchIPBridgeHandler extends AutopatchBaseBridgeHandler {
 
     private @Nullable IPPortReader ipPortReader;
 
-    private boolean deviceIsConnected = false;
+    // private boolean deviceIsConnected = false;
 
     public AutopatchIPBridgeHandler(Bridge bridge, @Nullable String hostipv4Address, ThingRegistry thingRegistry) {
         super(bridge);
@@ -77,21 +77,14 @@ public class AutopatchIPBridgeHandler extends AutopatchBaseBridgeHandler {
 
         ipAddress = configuration.getipAddress();
         port = configuration.getport();
-        reconnectInterval = configuration.getRefreshInterval();
-        sendDelay = configuration.getSendDelay();
 
-        if (validConfiguration(configuration)) {
-            getHostInterface();
-            updateStatus(ThingStatus.UNKNOWN, ThingStatusDetail.NONE, "Connecting");
-
-            // start the async connect task
-            logger.info("Starting the async connect task");
-            scheduler.execute(() -> connect());
-        }
+        commonInitialize(configuration.getRefreshInterval(), configuration.getSendDelay(),
+                configuration.getDeviceType());
     }
 
-    private boolean validConfiguration(AutopatchIPBridgeConfig config) {
-        if (isDuplicateBridge(config)) {
+    @Override
+    protected boolean validConfiguration() {
+        if (isDuplicateBridge(configuration)) {
             updateStatus(ThingStatus.OFFLINE, ThingStatusDetail.CONFIGURATION_ERROR, "Duplicate bridge.");
             return false;
         }
@@ -101,7 +94,7 @@ public class AutopatchIPBridgeHandler extends AutopatchBaseBridgeHandler {
             return false;
         }
 
-        if (ipAddress.isEmpty()) {
+        if (configuration.getipAddress().isEmpty()) {
             logger.debug("Could not get IP address from config");
             updateStatus(ThingStatus.OFFLINE, ThingStatusDetail.CONFIGURATION_ERROR, "IP Address not specified");
             return false;
@@ -109,7 +102,8 @@ public class AutopatchIPBridgeHandler extends AutopatchBaseBridgeHandler {
         return true;
     }
 
-    private void getHostInterface() {
+    @Override
+    protected void getHostInterface() {
         try {
             hostifAddress = InetAddress.getByName(hostipv4Address);
             NetworkInterface netIF = NetworkInterface.getByInetAddress(hostifAddress);
@@ -134,14 +128,21 @@ public class AutopatchIPBridgeHandler extends AutopatchBaseBridgeHandler {
 
     @Override
     protected synchronized void connect() {
-        logger.info("Autopatch IP Handler Connecting to address: {} with port {}.", ipAddress, port);
+        logger.info("Autopatch IP Handler {} Connecting to address: {} with port {}.", System.identityHashCode(this),
+                ipAddress, port);
 
-        if (deviceIsConnected) {
+        if (isDisposed) {
+            logger.trace("Thing is disposed; ignoring connection attempt");
+            return;
+        }
+
+        if (isConnected) {
             logger.debug("Device already connected; ignoring repeat connection");
             return;
         }
 
         if (openSocket()) {
+            isConnected = true;
             // create streams
             try {
                 dataInput = new BufferedReader(new InputStreamReader(socket.getInputStream(), "US-ASCII"));
@@ -154,12 +155,10 @@ public class AutopatchIPBridgeHandler extends AutopatchBaseBridgeHandler {
                 return;
             }
             logger.info("Got a connection on port {} for thing {} at {}", port, thing.getUID(), ipAddress);
-            updateStatus(ThingStatus.ONLINE);
 
             ipPortReader = new IPPortReader();
             ipPortReader.start();
 
-            deviceIsConnected = true;
             super.connect();
         } else {
             updateStatus(ThingStatus.OFFLINE, ThingStatusDetail.COMMUNICATION_ERROR, "Invalid address: " + ipAddress);
@@ -177,7 +176,9 @@ public class AutopatchIPBridgeHandler extends AutopatchBaseBridgeHandler {
         } catch (IOException e) {
             logger.error("Failed to get socket on port {} for thing {} at {}: {}", port, thing.getUID(), ipAddress);
             disconnect();
-            scheduleConnectRetry(reconnectInterval); // Possibly a temporary problem. Try again later.
+            if (!isDisposed) {
+                scheduleConnectRetry(reconnectInterval);
+            }
             return false;
         }
         return true;
@@ -192,7 +193,13 @@ public class AutopatchIPBridgeHandler extends AutopatchBaseBridgeHandler {
     }
 
     @Override
-    public void disconnect() {
+    public synchronized void disconnect() {
+        if (!isConnected) {
+            logger.trace("Already disconnected; ignoring redundant disconnect() call");
+            return;
+        }
+        isConnected = false;
+
         logger.info("Autopatch IP --> IP port disconnecting and being closed.");
 
         if (ipPortReader != null) {
@@ -201,24 +208,15 @@ public class AutopatchIPBridgeHandler extends AutopatchBaseBridgeHandler {
 
         closeSocket();
 
-        deviceIsConnected = false;
-
         logger.debug("Finished closing port.");
 
         super.disconnect();
     }
 
     @Override
-    protected synchronized void reconnect() {
-        logger.info("Keepalive timeout, attempting to reconnect to the bridge");
-
-        updateStatus(ThingStatus.OFFLINE, ThingStatusDetail.DUTY_CYCLE);
-        disconnect();
-        connect();
-    }
-
-    @Override
-    public void dispose() {
+    public synchronized void dispose() {
+        logger.trace("Disposing IPBridgeHandler {}", System.identityHashCode(this));
+        isDisposed = true;
         this.disconnect();
         super.dispose();
     }
@@ -241,15 +239,18 @@ public class AutopatchIPBridgeHandler extends AutopatchBaseBridgeHandler {
     @Override
     public void thingUpdated(Thing thing) {
         AutopatchIPBridgeConfig newConfig = getConfigAs(AutopatchIPBridgeConfig.class);
-        boolean validConfig = validConfiguration(newConfig);
-        boolean needsReconnect = validConfig && !this.configuration.sameConnectionParameters(newConfig);
+        AutopatchIPBridgeConfig oldConfig = this.configuration;
+
+        this.configuration = newConfig;
+
+        boolean validConfig = validConfiguration();
+        boolean needsReconnect = validConfig && !oldConfig.sameConnectionParameters(newConfig);
 
         if (!validConfig || needsReconnect) {
             dispose();
         }
 
         this.thing = thing;
-        this.configuration = newConfig;
 
         if (needsReconnect) {
             initialize();
@@ -295,7 +296,7 @@ public class AutopatchIPBridgeHandler extends AutopatchBaseBridgeHandler {
                 try {
 
                     String data = getData();
-                    if (data != "") {
+                    if (!data.isEmpty()) {
                         // System is connected in some way, cancel reconnect task.
                         if (keepAliveReconnectJob != null) {
                             keepAliveReconnectJob.cancel(true);
@@ -304,16 +305,18 @@ public class AutopatchIPBridgeHandler extends AutopatchBaseBridgeHandler {
                     }
 
                 } catch (IOException e) {
-                    logger.trace("IOException {}", e.toString());
+                    logger.trace("IP reader caught IOException: {}", e.toString());
                     updateStatus(ThingStatus.OFFLINE, ThingStatusDetail.COMMUNICATION_ERROR, "Error reading from port");
                     disconnect();
-                    scheduleConnectRetry(reconnectInterval);
+                    if (!isDisposed) {
+                        scheduleConnectRetry(reconnectInterval);
+                    }
                     break;
                 } catch (InterruptedException e) {
                     terminatePortReader = true;
                 }
             }
-            logger.debug("Serial reader STOPPING for {} on {}:{}", thingID(), ipAddress, port);
+            logger.debug("IP reader STOPPING for {} on {}:{}", thingID(), ipAddress, port);
         }
     }
 }

@@ -76,6 +76,14 @@
         <state min="1" max="16" step="1" pattern="%d"/>
     </channel-type>
     
+   <channel-type id="rotype-outputzones">
+        <item-type>String</item-type>
+        <kind>state</kind>
+        <label>Output Zone List</label>
+        <description>List of Output Zones connected to this input (x:y or x y z)</description>
+        <state readOnly="true"/>
+    </channel-type>
+    
     <channel-type id="rwtype-outputzone-numeric-mixed">
         <item-type>String</item-type>
         <kind>state</kind>

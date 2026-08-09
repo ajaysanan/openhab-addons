@@ -45,9 +45,6 @@ public class AutopatchBindingConstants {
     public static final ThingTypeUID THING_TYPE_OUTPUTZONE = new ThingTypeUID(BINDING_ID, "outputzone");
     public static final ThingTypeUID THING_TYPE_OUTPUTZONEGROUP = new ThingTypeUID(BINDING_ID, "outputzonegroup");
 
-    // public static final Set<String> UPDATE_INPUT_CHANNELS = new HashSet<>();
-    // public static final Set<String> UPDATE_OUTPUT_CHANNELS = new HashSet<>();
-
     // List of all channel groups
     public static final String CHANNEL_GROUP_NONE = "";
     public static final String CHANNEL_GROUP_INPUT_SETTINGS = "input-settings";
@@ -101,22 +98,6 @@ public class AutopatchBindingConstants {
     public static final Set<String> DSP_CHANNELS = Set.of(CHANNEL_TREBLE, CHANNEL_BASS, CHANNEL_BALANCE,
             CHANNEL_EQUALIZER);
 
-    /*
-     * static {
-     * UPDATE_INPUT_CHANNELS.add(CHANNEL_GAIN);
-     * UPDATE_INPUT_CHANNELS.add(CHANNEL_OUTPUTZONELIST);
-     * }
-     */
+    public static final Set<String> DSP_CAPABLE_ROUTERS = Set.of("Precis LT DSP 18x18", "Precis LT DSP 8x8");
 
-    /*
-     * static {
-     * UPDATE_OUTPUT_CHANNELS.add(CHANNEL_VOLUME);
-     * UPDATE_OUTPUT_CHANNELS.add(CHANNEL_MUTE);
-     * UPDATE_OUTPUT_CHANNELS.add(CHANNEL_CONNECTEDINPUT);
-     * UPDATE_OUTPUT_CHANNELS.add(CHANNEL_TREBLE);
-     * UPDATE_OUTPUT_CHANNELS.add(CHANNEL_BASS);
-     * UPDATE_OUTPUT_CHANNELS.add(CHANNEL_BALANCE);
-     * UPDATE_OUTPUT_CHANNELS.add(CHANNEL_EQUALIZER);
-     * }
-     */
 }
