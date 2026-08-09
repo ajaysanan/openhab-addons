@@ -40,11 +40,16 @@
                     The version of the Autopatch device.
                 </description>
                 <options>
-                    <option value="autodetect">Autodetect</option>
-                    <option value="epica128">Epica-128</option>
-                    <option value="epica256">Epica-256</option>                
-                    <option value="precisDSP0808">PrecisDSP 8x8</option>
-                    <option value="precisDSP1818">PrecisDSP 18x18</option>
+                    <option value="autodetect">Autodetect</option>              
+                    <option value="Precis LT DSP 8x8">Precis LT DSP 8x8</option>
+                    <option value="Precis LT DSP 18x18">Precis LT DSP 18x18</option>
+                    <option value="Precis LT 4x4">Precis LT 4x4</option>
+                    <option value="Precis LT 4x8">Precis LT 4x8</option>
+                    <option value="Precis LT 8x4">Precis LT 8x4</option>
+                    <option value="Precis LT 8x8">Precis LT 8x8</option>
+                    <option value="Precis 8x4">Precis 8x4</option>
+                    <option value="Precis 8x8">Precis 8x8</option>
+                    <option value="Precis 12x8">Precis 12x8</option>
                 </options>
                 <default>autodetect</default>
             </parameter>
