@@ -106,6 +106,8 @@ public abstract class AutopatchBaseBridgeHandler extends BaseBridgeHandler {
     }
 
     protected void commonInitialize(int refreshInterval, int sendDelay, String deviceType) {
+        isDisposed = false;
+
         this.reconnectInterval = refreshInterval;
         this.sendDelay = sendDelay;
         this.deviceType = deviceType;
