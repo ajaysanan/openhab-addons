@@ -15,7 +15,11 @@ package org.openhab.binding.synaccess.internal;
 import static org.openhab.binding.synaccess.internal.SynaccessBindingConstants.*;
 
 import java.io.IOException;
+import java.math.BigDecimal;
+import java.time.Instant;
 import java.time.LocalDate;
+import java.util.ArrayList;
+import java.util.List;
 import java.util.Map;
 import java.util.concurrent.BlockingQueue;
 import java.util.concurrent.LinkedBlockingQueue;
@@ -28,24 +32,33 @@ import org.eclipse.jdt.annotation.NonNullByDefault;
 import org.eclipse.jdt.annotation.Nullable;
 import org.openhab.binding.synaccess.internal.net.TelnetSession;
 import org.openhab.binding.synaccess.internal.net.TelnetSessionListener;
-import org.openhab.core.thing.Bridge;
+import org.openhab.core.library.types.OnOffType;
+import org.openhab.core.library.types.StringType;
+import org.openhab.core.thing.Channel;
 import org.openhab.core.thing.ChannelUID;
 import org.openhab.core.thing.Thing;
 import org.openhab.core.thing.ThingStatus;
 import org.openhab.core.thing.ThingStatusDetail;
-import org.openhab.core.thing.binding.BaseBridgeHandler;
+import org.openhab.core.thing.binding.BaseThingHandler;
+import org.openhab.core.thing.binding.builder.ChannelBuilder;
+import org.openhab.core.thing.binding.builder.ThingBuilder;
+import org.openhab.core.thing.type.ChannelTypeUID;
 import org.openhab.core.types.Command;
+import org.openhab.core.types.RefreshType;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 /**
- * Handler responsible for communicating with the Synaccess PDU. The handler uses the telnet session leveraged
- * from the lutron binding.
+ * Handler responsible for communicating with a Synaccess PDU over its telnet interface. The handler uses
+ * the telnet session leveraged from the lutron binding.
+ *
+ * There is always exactly one PDU per connection, so this single handler owns both the connection
+ * lifecycle and the switch/command channels for the device - there is no separate bridge/child-thing split.
  *
  * @author Ajay Sanan - Initial contribution
  */
 @NonNullByDefault
-public class IPBridgeHandler extends BaseBridgeHandler {
+public class IPBridgeHandler extends BaseThingHandler {
     private static final Pattern RESPONSE_REGEX = Pattern.compile("(\\$A[0-7F])[ ,]?([01]*)?[ ,]?([01]*)");
     private static final Pattern STATUS_REGEX = Pattern.compile("(Goodbye\\!|Password:|Invalid ID\\/PWD|HW).*");
 
@@ -67,10 +80,13 @@ public class IPBridgeHandler extends BaseBridgeHandler {
     private @Nullable ScheduledFuture<?> reconnectJob;
     private @Nullable ScheduledFuture<?> connectRetryRecurringJob;
 
-    protected @Nullable SynaccessDiscoveryService discoveryService;
+    private volatile boolean isDisposed = false;
 
-    public IPBridgeHandler(Bridge bridge) {
-        super(bridge);
+    // Channel/command state, formerly in the separate PDUHandler.
+    private long lastChannelUpdateTime = 0;
+
+    public IPBridgeHandler(Thing thing) {
+        super(thing);
 
         this.session = new TelnetSession();
 
@@ -88,8 +104,11 @@ public class IPBridgeHandler extends BaseBridgeHandler {
 
     @Override
     public void initialize() {
+        // Reset in case this handler instance is being reused after a manual dispose()/initialize()
+        // cycle (see thingUpdated()) rather than being replaced by the handler factory.
+        isDisposed = false;
+
         this.config = getConfigAs(IPBridgeConfig.class);
-        // this.config = getThing().getConfiguration().as(IPBridgeConfig.class);
         if (validConfiguration(this.config)) {
             reconnectInterval = (config.reconnect > 0) ? config.reconnect : DEFAULT_RECONNECT_MINUTES;
             heartbeatInterval = (config.heartbeat > 0) ? config.heartbeat : DEFAULT_HEARTBEAT_MINUTES;
@@ -101,23 +120,20 @@ public class IPBridgeHandler extends BaseBridgeHandler {
         }
     }
 
-    public void setDiscoveryService(SynaccessDiscoveryService discoveryService) {
-        this.discoveryService = discoveryService;
-    }
-
     private boolean validConfiguration(IPBridgeConfig config) {
-        if (config.ipAddress == "") {
-            updateStatus(ThingStatus.OFFLINE, ThingStatusDetail.CONFIGURATION_ERROR, "bridge configuration missing");
-            return false;
-        }
         if (config.ipAddress.isEmpty()) {
-            updateStatus(ThingStatus.OFFLINE, ThingStatusDetail.CONFIGURATION_ERROR, "bridge address not specified");
+            updateStatus(ThingStatus.OFFLINE, ThingStatusDetail.CONFIGURATION_ERROR, "IP address not specified");
             return false;
         }
         return true;
     }
 
     private synchronized void connect() {
+        if (isDisposed) {
+            logger.trace("{} is disposed; ignoring connection attempt", thing.getUID());
+            return;
+        }
+
         if (this.session.isConnected()) {
             logger.trace("Device {} already connected; ignoring repeat connection", thing.getUID());
             config = getConfigAs(IPBridgeConfig.class);
@@ -149,7 +165,7 @@ public class IPBridgeHandler extends BaseBridgeHandler {
         logger.trace("{} connected (still needs authorization: {})", thing.getUID(), authRequired);
         if (authRequired) {
             updateStatus(ThingStatus.UNKNOWN);
-            sendCommand(config.user != "" ? config.user : DEFAULT_USER);
+            sendCommand(!config.user.isEmpty() ? config.user : DEFAULT_USER);
         } else {
             connectTasks();
         }
@@ -158,8 +174,10 @@ public class IPBridgeHandler extends BaseBridgeHandler {
     private void connectError(ThingStatusDetail detail, @Nullable String errMessage) {
         updateStatus(ThingStatus.OFFLINE, detail, errMessage);
         disconnect();
-        // Possibly a temporary problem. Try again later.
-        scheduleConnectRetry(reconnectInterval);
+        if (!isDisposed) {
+            // Possibly a temporary problem. Try again later.
+            scheduleConnectRetry(reconnectInterval);
+        }
     }
 
     private void connectTasks() {
@@ -226,16 +244,19 @@ public class IPBridgeHandler extends BaseBridgeHandler {
 
         if (connectRetryRecurringJob != null) {
             connectRetryRecurringJob.cancel(false);
+            connectRetryRecurringJob = null;
         }
 
         if (this.keepaliveRecurringJob != null) {
             this.keepaliveRecurringJob.cancel(true);
+            this.keepaliveRecurringJob = null;
         }
 
         if (this.reconnectJob != null) {
             // This method can be called from the keepAliveReconnect thread. Make sure
             // we don't interrupt ourselves, as that may prevent the reconnection attempt.
             this.reconnectJob.cancel(false);
+            this.reconnectJob = null;
         }
 
         if (messageSenderThread != null) {
@@ -268,6 +289,10 @@ public class IPBridgeHandler extends BaseBridgeHandler {
     }
 
     private synchronized void reconnect() {
+        if (isDisposed) {
+            return;
+        }
+
         logger.info("{} keepalive timeout or comm error, attempting to reconnect to the device", thing.getUID());
 
         updateStatus(ThingStatus.OFFLINE, ThingStatusDetail.DUTY_CYCLE);
@@ -280,26 +305,6 @@ public class IPBridgeHandler extends BaseBridgeHandler {
         if (!sendQueue.contains(command)) {
             this.sendQueue.add(command);
         }
-    }
-
-    private @Nullable PDUHandler findThingHandler() {
-        for (Thing thing : getThing().getThings()) {
-            if (thing.getHandler() instanceof PDUHandler) {
-                PDUHandler handler = (PDUHandler) thing.getHandler();
-
-                try {
-                    if (handler != null) {
-                        return handler;
-                    }
-                } catch (IllegalStateException e) {
-                    logger.trace("{} handler not initialized", thing.getUID());
-                }
-            }
-        }
-        if (discoveryService != null) {
-            discoveryService.notifyDiscoveredPDU(config.ipAddress);
-        }
-        return null;
     }
 
     private void parseUpdates() {
@@ -341,7 +346,7 @@ public class IPBridgeHandler extends BaseBridgeHandler {
                             }
                             break;
                         case "Password:":
-                            sendCommand(config.password != "" ? config.password : DEFAULT_PASSWORD);
+                            sendCommand(!config.password.isEmpty() ? config.password : DEFAULT_PASSWORD);
                             // if invalid pwd, will disconnect quickly so need to recheck the buffer
                             scheduler.schedule(this::parseUpdates, 500, TimeUnit.MILLISECONDS);
                             scheduler.schedule(this::connectTasks, 2000, TimeUnit.MILLISECONDS);
@@ -370,44 +375,36 @@ public class IPBridgeHandler extends BaseBridgeHandler {
                 updateStatus(ThingStatus.ONLINE);
             }
 
-            PDUHandler handler = findThingHandler();
-            if ((handler != null)) {
-                logger.trace("{} handleResponseMessage: Received message: -->{}<--", thing.getUID(), line);
-                try {
-                    switch (responsematch.group(1)) {
-                        // case $A0 is acknowledge, sometimes with data; $A5, $A7, $A3 are echos
-                        case "$A0":
-                            // If has power data, evaluate it
-                            if (responsematch.group(2).length() > 1) {
-                                // Create channels if not done already
-                                handler.configureChannels(responsematch.group(2).length());
-                                for (int i = 1; i <= responsematch.group(2).length(); i++) {
-                                    handler.handleUpdate(i, responsematch.group(2).substring(i - 1, i));
-                                }
-                            } else {
-                                // Something valid happened without data; request data
-                                sendCommand("$A5");
+            logger.trace("{} handleResponseMessage: Received message: -->{}<--", thing.getUID(), line);
+            try {
+                switch (responsematch.group(1)) {
+                    // case $A0 is acknowledge, sometimes with data; $A5, $A7, $A3 are echos
+                    case "$A0":
+                        // If has power data, evaluate it
+                        if (responsematch.group(2).length() > 1) {
+                            // Create channels if not done already
+                            configureChannels(responsematch.group(2).length());
+                            for (int i = 1; i <= responsematch.group(2).length(); i++) {
+                                handlePortUpdate(i, responsematch.group(2).substring(i - 1, i));
                             }
-                            // Get the firmware version if we don't have it yet
-                            Map<String, String> props = editProperties();
-                            if (props.get("Firmware Version") == null || props.get("Firmware Version") == "") {
-                                sendCommand("ver");
-                            }
-                            return true;
-                        case "$AF":
-                            logger.warn("{}: Error in message", thing.getUID(), line);
-                            return true;
-                        case "$A5", "$A3", "$A7":
-                            return true;
-                    }
-                } catch (RuntimeException e) {
-                    logger.warn("Runtime exception in {} while processing update: line {}: {}", thing.getUID(), line,
-                            e);
+                        } else {
+                            // Something valid happened without data; request data
+                            sendCommand("$A5");
+                        }
+                        // Get the firmware version if we don't have it yet
+                        Map<String, String> props = editProperties();
+                        if (props.get("Firmware Version") == null || props.get("Firmware Version") == "") {
+                            sendCommand("ver");
+                        }
+                        return true;
+                    case "$AF":
+                        logger.warn("{}: Error in message", thing.getUID(), line);
+                        return true;
+                    case "$A5", "$A3", "$A7":
+                        return true;
                 }
-            } else {
-                if (discoveryService != null) {
-                    discoveryService.notifyDiscoveredPDU(config.ipAddress);
-                }
+            } catch (RuntimeException e) {
+                logger.warn("Runtime exception in {} while processing update: line {}: {}", thing.getUID(), line, e);
             }
         }
         return false;
@@ -441,14 +438,92 @@ public class IPBridgeHandler extends BaseBridgeHandler {
     }
 
     @Override
-    public void dispose() {
+    public synchronized void dispose() {
+        logger.trace("Disposing {}", thing.getUID());
+        isDisposed = true;
         disconnect();
         super.dispose();
     }
 
-    @Override
-    public void handleCommand(ChannelUID channelUID, Command command) {
-        // No commands in the Bridge Thing
+    // --- Port switch channels / commands (formerly the separate PDUHandler) ---
+
+    private void configureChannels(int numberChannels) {
+        List<Channel> existingChannels = getThing().getChannels();
+
+        if (existingChannels.isEmpty()) {
+            logger.debug("Configuring {} channels for PDU {}", numberChannels, thing.getUID());
+            ThingBuilder thingBuilder = editThing();
+            List<Channel> channelList = new ArrayList<>();
+
+            // port names are 1 based (portstatus1, portstatus2, etc)
+            for (int i = 1; i <= numberChannels; i++) {
+                ChannelTypeUID channelTypeUID = new ChannelTypeUID(BINDING_ID, "switchState");
+                ChannelUID channelUID = new ChannelUID(getThing().getUID(), CHANNEL_PORTSTATUS + Integer.toString(i));
+                Channel channel = ChannelBuilder.create(channelUID, "Switch").withType(channelTypeUID)
+                        .withLabel("Power Port " + Integer.toString(i)).build();
+                channelList.add(channel);
+            }
+
+            ChannelTypeUID allPortsTypeUID = new ChannelTypeUID(BINDING_ID, "commandChannel");
+            ChannelUID allPortsUID = new ChannelUID(getThing().getUID(), CHANNEL_ALLPORTS);
+            Channel allPortsChannel = ChannelBuilder.create(allPortsUID, "String").withType(allPortsTypeUID)
+                    .withLabel("All Power Ports").build();
+            channelList.add(allPortsChannel);
+
+            thingBuilder.withChannels(channelList);
+            updateThing(thingBuilder.build());
+        }
     }
 
+    private void handlePortUpdate(int port, String status) {
+        // Parameter is the port status (0 or 1) for the given port (1 based)
+        BigDecimal state = new BigDecimal(status);
+        updateState(CHANNEL_PORTSTATUS + port, state.compareTo(BigDecimal.ZERO) == 0 ? OnOffType.OFF : OnOffType.ON);
+    }
+
+    @Override
+    public void channelLinked(ChannelUID channelUID) {
+        // Refresh state when new item is linked. Suppress multiple requests sent within 3 seconds
+        if ((Instant.now().toEpochMilli() - lastChannelUpdateTime > 3000)
+                && channelUID.getId().contains(CHANNEL_PORTSTATUS)) {
+            lastChannelUpdateTime = Instant.now().toEpochMilli();
+            sendCommand("$A5");
+        }
+    }
+
+    @Override
+    public void handleCommand(ChannelUID channelUID, Command command) {
+        String id = channelUID.getId();
+        Channel channel = getThing().getChannel(id);
+
+        if (channel == null) {
+            logger.warn("Command received on invalid channel {} for device {}", channelUID, getThing().getUID());
+            return;
+        }
+
+        // For portstatus commands handle OnOffType and RefreshType
+        if (id.startsWith(CHANNEL_PORTSTATUS)) {
+            if (command instanceof OnOffType) {
+                StringBuilder outCommand = new StringBuilder("$A3 ");
+                // switch 1 based channel port number to 0 based value for the device
+                outCommand.append(Integer.parseInt(id.substring(id.length() - 1)) - 1);
+                outCommand.append(command.equals(OnOffType.ON) ? " 1" : " 0");
+                sendCommand(outCommand.toString());
+            } else if (command instanceof RefreshType) {
+                sendCommand("$A5");
+            } else {
+                logger.warn("Invalid command type {} received for channel {} device {}", command, channelUID,
+                        getThing().getUID());
+            }
+            return;
+        }
+        // For allports command handle stringtype only; write only channel
+        if (id.equals(CHANNEL_ALLPORTS) && (command instanceof StringType)) {
+            if (command.toString().equals("ALL_ON")) {
+                sendCommand("$A7 1");
+            } else if (command.toString().equals("ALL_OFF")) {
+                sendCommand("$A7 0");
+            }
+        }
+    }
 }

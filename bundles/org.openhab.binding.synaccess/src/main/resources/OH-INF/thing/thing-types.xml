@@ -4,10 +4,11 @@
 	xmlns:thing="https://openhab.org/schemas/thing-description/v1.0.0"
 	xsi:schemaLocation="https://openhab.org/schemas/thing-description/v1.0.0 https://openhab.org/schemas/thing-description-1.0.0.xsd">
 
-    <bridge-type id="ipbridge">
-        <label>Synaccess Telnet Access Point</label>
-        <description>Telnet IP access point to Synaccess Power Distribution Unit</description>
-        <category>NetworkAppliance</category>
+    <thing-type id="ipbridge">
+        <label>Synaccess PDU</label>
+        <description>Telnet-connected Synaccess Power Distribution Unit with switched power ports</description>
+        <category>PowerOutlet</category>
+        <semantic-equipment-tag>PowerOutlet</semantic-equipment-tag>
         <properties>
             <property name="Vendor">Synaccess</property>
             <property name="Firmware Version"></property>
@@ -53,13 +54,13 @@
                 <advanced>true</advanced>
             </parameter>
         </config-description>
-    </bridge-type>
+    </thing-type>
 
     <bridge-type id="serialbridge">
         <label>Synaccess RS232 Bridge</label>
         <description>RS232 access point to Synaccess Power Distribution Unit</description>
         <category>NetworkAppliance</category>
-		<properties>
+			<properties>
             <property name="Vendor">Synaccess</property>
             <property name="Firmware Version"></property>
         </properties>
@@ -93,19 +94,10 @@
             </parameter>
         </config-description>
     </bridge-type>
+    <!-- serialbridge is not yet implemented (no handler exists). When RS232 support is added it
+         should follow the same single-thing pattern as ipbridge rather than reintroducing a
+         bridge/child-thing split. -->
 
-    <thing-type id="pdu">
-        <supported-bridge-type-refs>
-            <bridge-type-ref id="ipbridge"/>
-            <bridge-type-ref id="serialbridge"/>
-        </supported-bridge-type-refs>
-        <label>Synaccess PDU</label>
-        <description>Controls switched loads</description>
-        <category>PowerOutlet</category>
-        <semantic-equipment-tag>PowerOutlet</semantic-equipment-tag>
-        <representation-property>ipAddress</representation-property>
-    </thing-type>
-    
     <channel-type id="switchState">
         <item-type>Switch</item-type>
         <label>Switch State</label>
