@@ -14,6 +14,7 @@ package org.openhab.binding.autopatch.internal.handler;
 
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Objects;
 
 import org.eclipse.jdt.annotation.NonNullByDefault;
 import org.eclipse.jdt.annotation.Nullable;
@@ -31,6 +32,7 @@ import org.openhab.core.thing.ThingStatusDetail;
 import org.openhab.core.thing.ThingStatusInfo;
 import org.openhab.core.thing.binding.BaseThingHandler;
 import org.openhab.core.types.Command;
+import org.openhab.core.types.RefreshType;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -77,27 +79,32 @@ public class AutopatchOutputZoneGroupHandler extends BaseThingHandler {
         }
     }
 
-    private void refreshAllChannels() {
-        // logger.debug("Trying to refresh any linked Output Zone Group {} channels", zoneNumbers.toString());
-        // Bridge bridge = getBridge();
-        // if (bridge != null) {
-        // if (bridge.getStatus().equals(ThingStatus.ONLINE)) {
-        // for (String channelId : UPDATE_OUTPUT_GROUP_CHANNELS) {
-        // // resetState(channelId);
-        // }
-        // } else {
-        // updateStatus(ThingStatus.OFFLINE, ThingStatusDetail.BRIDGE_OFFLINE, "Bridge not Online");
-        // }
-        // }
+    @Override
+    public void channelLinked(ChannelUID channelUID) {
+        super.channelLinked(channelUID);
+        refreshFromMember(channelUID.getId());
     }
 
-    // @Override
-    // public void channelLinked(ChannelUID channelUID) {
-    // resetState(channelUID.getId());
-    // }
+    private void refreshFromMember(String channelId) {
+        Integer zoneNumber = zoneNumbers.stream().filter(Objects::nonNull).findFirst().orElse(null);
+        if (zoneNumber == null) {
+            logger.warn("No zones configured for group {}; cannot refresh channel {}", getThing().getUID(), channelId);
+            return;
+        }
+        if (isLinked(channelId)) {
+            CommandType command = BCSCommand.getCommandType(channelId);
+            if (command != null) {
+                sendMessage(BCSFunctions.buildStatusCommand(command, zoneLevel, zoneNumber.toString()));
+            }
+        }
+    }
 
     @Override
     public void handleCommand(ChannelUID channelUID, Command command) {
+        if (command instanceof RefreshType) {
+            refreshFromMember(channelUID.getId());
+            return;
+        }
         AutopatchBaseBridgeHandler bridgehandler = getBridgeHandler();
         String zones = zoneNumbers.toString().replaceAll("[\\[,\\]]", "");
         if ((bridgehandler != null) && BCSFunctions.isValidZoneList(zones, bridgehandler.numOutputZones)) {
@@ -113,16 +120,6 @@ public class AutopatchOutputZoneGroupHandler extends BaseThingHandler {
                 return;
             }
             if (isLinked(channelUID)) {
-                // Can only change DSP states one zone at a time
-                // if (DSP_CHANNELS.contains(channelId)) {
-                // for (Integer zone : zoneNumbers) {
-                // if (zone != null) {
-                // sendMessage(BCSFunctions.buildChangeCommand(commandtype, zoneLevel, zone.toString(),
-                // command.toString()));
-                // sendMessage(BCSFunctions.buildStatusCommand(commandtype, zoneLevel, zone.toString()));
-                // }
-                // }
-                // } else {
                 sendMessage(BCSFunctions.buildChangeCommand(commandtype, zoneLevel, zones, command.toString()));
                 for (Integer zone : zoneNumbers) {
                     if (zone != null) {
@@ -130,27 +127,9 @@ public class AutopatchOutputZoneGroupHandler extends BaseThingHandler {
                     }
                 }
             }
-            // resetState(channelId);
+
         }
     }
-    // }
-
-    // protected void resetState(String channelId) {
-    // // This zone group is read only; default any state changes to items
-    // // String channel = BCSCommand.getChannel(bcs.commandName);
-    // if (isLinked(channelId)) {
-    // Class<?> state = BCSCommand.getState(channelId);
-    // if (PercentType.class.equals(state)) {
-    // updateState(channelId, new PercentType(0));
-    // } else if (OnOffType.class.equals(state)) {
-    // updateState(channelId, OnOffType.OFF);
-    // } else if (DecimalType.class.equals(state)) {
-    // updateState(channelId, new DecimalType(0));
-    // // } else if (StringType.class.equals(state)) {
-    // // updateState(channelId, new StringType("0 0 0 0 0 0 0 0 0 0"));
-    // }
-    // }
-    // }
 
     protected void sendMessage(String query) {
         AutopatchBaseBridgeHandler bridgeHandler = getBridgeHandler();
@@ -177,8 +156,6 @@ public class AutopatchOutputZoneGroupHandler extends BaseThingHandler {
         if (bridgeStatusInfo.getStatus().equals(ThingStatus.ONLINE)
                 && getThing().getStatusInfo().getStatusDetail().equals(ThingStatusDetail.BRIDGE_OFFLINE)) {
             updateStatus(ThingStatus.ONLINE, ThingStatusDetail.NONE);
-            logger.debug("Bridge Status changed to Online so refreshing Output Zone Group channels");
-            refreshAllChannels();
         } else if (bridgeStatusInfo.getStatus().equals(ThingStatus.OFFLINE)) {
             updateStatus(ThingStatus.OFFLINE, ThingStatusDetail.BRIDGE_OFFLINE);
         }

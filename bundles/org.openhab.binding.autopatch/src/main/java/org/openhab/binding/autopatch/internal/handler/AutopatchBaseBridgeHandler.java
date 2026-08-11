@@ -39,6 +39,7 @@ import org.openhab.binding.autopatch.internal.config.AutopatchIPBridgeConfig;
 import org.openhab.binding.autopatch.internal.config.AutopatchSerialBridgeConfig;
 import org.openhab.core.common.ThreadPoolManager;
 import org.openhab.core.library.types.OnOffType;
+import org.openhab.core.library.types.PercentType;
 import org.openhab.core.thing.Bridge;
 import org.openhab.core.thing.Channel;
 import org.openhab.core.thing.ChannelUID;
@@ -379,18 +380,21 @@ public abstract class AutopatchBaseBridgeHandler extends BaseBridgeHandler {
     }
 
     public synchronized void outputzoneStateChange(CommandType command, int zone) {
-        logger.trace("Trying to update Output Group Zones for change in {} in zone {}", command.toString(), zone);
         for (Thing thing : getThing().getThings()) {
             ThingHandler handler = thing.getHandler();
             if (handler instanceof AutopatchOutputZoneGroupHandler groupHandler
                     && groupHandler.getZonenumbers().contains(zone)) {
-                logger.trace("  Found OutputGroupZone {}", groupHandler.toString());
+                String label = groupHandler.getThing().getLabel();
+                logger.trace("Updating OutputGroupZone {} for change in {} in zone {}",
+                        label != null ? label : groupHandler.getThing().getUID(), command, zone);
+
                 List<@NonNull AutopatchOutputZoneHandler> memberZones = getZoneHandlersFor(
                         groupHandler.getZonenumbers());
 
                 if (command.equals(CommandType.MUTEZONE) || command.equals(CommandType.UNMUTEZONE)) {
                     groupHandler.updateChannelState(CHANNEL_MUTE, computeMuteAgreement(memberZones));
                 } else if (command.equals(CommandType.VOLUME)) {
+                    groupHandler.updateChannelState(CHANNEL_MUTE, computeMuteAgreement(memberZones));
                     groupHandler.updateChannelState(CHANNEL_VOLUME, computeVolumeAgreement(memberZones));
                 } else if (command.equals(CommandType.OUTPUTSWITCH)) {
                     groupHandler.updateChannelState(CHANNEL_CONNECTEDINPUT,
@@ -414,21 +418,30 @@ public abstract class AutopatchBaseBridgeHandler extends BaseBridgeHandler {
         boolean allMuted = zones.stream().allMatch(zh -> zh.getMuteState() == OnOffType.ON);
         boolean allUnmuted = zones.stream().allMatch(zh -> zh.getMuteState() == OnOffType.OFF);
         if (allMuted) {
-            return "MUTED";
+            return "ON";
         }
         if (allUnmuted) {
-            return "UNMUTED";
+            return "OFF";
         }
         return "MIXED";
     }
 
     private String computeVolumeAgreement(List<@NonNull AutopatchOutputZoneHandler> zones) {
-        if (zones.isEmpty()) {
+        List<@NonNull PercentType> volumes = zones.stream().map(AutopatchOutputZoneHandler::getVolumeState)
+                .filter(PercentType.class::isInstance).map(PercentType.class::cast).toList();
+
+        if (volumes.isEmpty()) {
             return "UNDEF";
         }
-        State first = zones.get(0).getVolumeState();
-        boolean allEqual = zones.stream().allMatch(zh -> zh.getVolumeState().equals(first));
-        return allEqual ? first.toString() : "MIXED";
+
+        boolean allEqual = volumes.stream().allMatch(v -> v.equals(volumes.get(0)));
+        if (allEqual) {
+            return volumes.get(0).toString();
+        }
+
+        int min = volumes.stream().mapToInt(PercentType::intValue).min().orElseThrow();
+        int max = volumes.stream().mapToInt(PercentType::intValue).max().orElseThrow();
+        return min + "<--MIXED-->" + max;
     }
 
     private String computeConnectedInputAgreement(List<@NonNull AutopatchOutputZoneHandler> zones) {
