@@ -17,7 +17,7 @@
         <kind>state</kind>
         <label>Input Gain Adjustment</label>
         <description>Adjust the Gain</description>
-        <state min="-10" max="10" step="0.5" pattern="%+d"/>
+        <state min="-10" max="10" step="0.5" pattern="%+.1f"/>
     </channel-type>    
     
     <channel-type id="rwtype-tone">
@@ -25,7 +25,7 @@
         <kind>state</kind>
         <label>Tone Adjustment</label>
         <description>Adjust the Treble or Bass</description>
-        <state min="-12" max="12" step="0.5" pattern="%+d"/>
+        <state min="-12" max="12" step="0.5" pattern="%+.1f"/>
     </channel-type>
 
     <channel-type id="rwtype-balance">

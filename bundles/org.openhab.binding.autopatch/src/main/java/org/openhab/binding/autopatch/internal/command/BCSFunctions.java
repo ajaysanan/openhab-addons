@@ -125,13 +125,14 @@ public class BCSFunctions {
             case BASS:
             case EQUALIZER:
                 StringBuilder sb = new StringBuilder();
-                for (String s : value.replaceAll("[^0-9 ]", "").trim().split("\\s")) {
-                    sb.append((int) (Float.parseFloat(s) * 10)).append(" ");
+                for (String s : value.replaceAll("[^0-9.\\- ]", "").trim().split("\\s+")) {
+                    sb.append(Math.round(Float.parseFloat(s) * 10)).append(" ");
                 }
                 return sb.toString().trim();
             case INPUTSWITCH:
                 return Arrays.toString(getList(value.trim().replace("Z", "")).toArray()).replaceAll("[\\[\\],]", "");
             case BALANCE:
+                return Integer.toString(Math.round(Float.parseFloat(value.trim().replace("Z", ""))));
             case OUTPUTSWITCH:
                 return value.trim().replace("Z", "");
             default:
