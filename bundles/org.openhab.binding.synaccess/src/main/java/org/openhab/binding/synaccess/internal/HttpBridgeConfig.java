@@ -15,21 +15,20 @@ package org.openhab.binding.synaccess.internal;
 import org.eclipse.jdt.annotation.NonNullByDefault;
 
 /**
- * Configuration settings for an {@link org.openhab.binding.synaccess.handler.IPBridgeHandler}.
+ * Configuration settings for an {@link org.openhab.binding.synaccess.handler.HttpBridgeHandler}.
  *
  * @author Ajay Sanan - Initial contribution
  */
 @NonNullByDefault
-public class IPBridgeConfig {
+public class HttpBridgeConfig {
     public String ipAddress = "";
     public int port;
     public String user = "";
     public String password = "";
-    public int reconnect;
-    public int heartbeat;
+    public int pollInterval;
     public int delay = 0;
 
-    public boolean sameConnectionParameters(IPBridgeConfig config) {
+    public boolean sameConnectionParameters(HttpBridgeConfig config) {
         return ipAddress.equals(config.ipAddress) && user.equals(config.user) && password.equals(config.password)
                 && (port == config.port);
     }

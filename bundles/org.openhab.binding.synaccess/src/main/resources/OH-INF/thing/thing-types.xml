@@ -1,11 +1,11 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <thing:thing-descriptions bindingId="synaccess"
-	xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
-	xmlns:thing="https://openhab.org/schemas/thing-description/v1.0.0"
-	xsi:schemaLocation="https://openhab.org/schemas/thing-description/v1.0.0 https://openhab.org/schemas/thing-description-1.0.0.xsd">
+    xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+    xmlns:thing="https://openhab.org/schemas/thing-description/v1.0.0"
+    xsi:schemaLocation="https://openhab.org/schemas/thing-description/v1.0.0 https://openhab.org/schemas/thing-description-1.0.0.xsd">
 
     <thing-type id="ipbridge">
-        <label>Synaccess PDU</label>
+        <label>Synaccess PDU (IP Telnet)</label>
         <description>Telnet-connected Synaccess Power Distribution Unit with switched power ports</description>
         <category>PowerOutlet</category>
         <semantic-equipment-tag>PowerOutlet</semantic-equipment-tag>
@@ -56,11 +56,55 @@
         </config-description>
     </thing-type>
 
+    <thing-type id="httpbridge">
+        <label>Synaccess PDU (HTTP)</label>
+        <description>HTTP-connected Synaccess Power Distribution Unit with switched power ports</description>
+        <category>PowerOutlet</category>
+        <semantic-equipment-tag>PowerOutlet</semantic-equipment-tag>
+        <properties>
+            <property name="Vendor">Synaccess</property>
+        </properties>
+
+        <representation-property>ipAddress</representation-property>
+
+        <config-description>
+            <parameter name="ipAddress" type="text" required="true">
+                <context>network-address</context>
+                <label>IP or Host Name</label>
+                <description>The IP or host name of the Synaccess Power Distribution Unit</description>
+                <default>192.168.1.100</default>
+            </parameter>
+            <parameter name="port" type="integer" required="true">
+                <context>network-address</context>
+                <label>HTTP Port</label>
+                <description>The port the PDU's web server listens on, used for cmd.cgi requests</description>
+                <default>80</default>
+                <advanced>true</advanced>
+            </parameter>
+            <parameter name="user" type="text">
+                <label>User Name</label>
+                <description>The user name to log in to the Power Distribution Unit</description>
+            </parameter>
+            <parameter name="password" type="text">
+                <context>password</context>
+                <label>Password</label>
+                <description>The user password to log in to the Power Distribution Unit</description>
+            </parameter>
+            <parameter name="pollInterval" type="integer" min="1" max="60" unit="min">
+                <label>Poll Interval</label>
+                <description>The period in minutes between status polls of the PDU</description>
+                <unitLabel>minutes</unitLabel>
+                <default>5</default>
+                <advanced>true</advanced>
+            </parameter>
+        </config-description>
+    </thing-type>
+
     <bridge-type id="serialbridge">
-        <label>Synaccess RS232 Bridge</label>
+        <label>Synaccess PDU (RS232)</label>
         <description>RS232 access point to Synaccess Power Distribution Unit</description>
         <category>NetworkAppliance</category>
-			<properties>
+            <properties>
             <property name="Vendor">Synaccess</property>
             <property name="Firmware Version"></property>
         </properties>
@@ -97,6 +141,17 @@
     <!-- serialbridge is not yet implemented (no handler exists). When RS232 support is added it
          should follow the same single-thing pattern as ipbridge rather than reintroducing a
          bridge/child-thing split. -->
+
+    <channel-type id="lastRequestDateTime">
+        <item-type>DateTime</item-type>
+        <label>Last Request Time</label>
+        <description>Timestamp of the most recent successful or failed request to the PDU</description>
+        <tags>
+            <tag>Status</tag>
+            <tag>Timestamp</tag>
+        </tags>
+        <state readOnly="true" pattern="%1$tY-%1$tm-%1$td %1$tH:%1$tM:%1$tS"/>
+    </channel-type>
 
     <channel-type id="switchState">
         <item-type>Switch</item-type>

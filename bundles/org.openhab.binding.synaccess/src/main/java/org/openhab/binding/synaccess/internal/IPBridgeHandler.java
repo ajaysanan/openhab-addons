@@ -21,6 +21,7 @@ import java.time.LocalDate;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
+import java.util.Map.Entry;
 import java.util.concurrent.BlockingQueue;
 import java.util.concurrent.LinkedBlockingQueue;
 import java.util.concurrent.ScheduledFuture;
@@ -32,6 +33,7 @@ import org.eclipse.jdt.annotation.NonNullByDefault;
 import org.eclipse.jdt.annotation.Nullable;
 import org.openhab.binding.synaccess.internal.net.TelnetSession;
 import org.openhab.binding.synaccess.internal.net.TelnetSessionListener;
+import org.openhab.core.config.core.Configuration;
 import org.openhab.core.library.types.OnOffType;
 import org.openhab.core.library.types.StringType;
 import org.openhab.core.thing.Channel;
@@ -40,6 +42,7 @@ import org.openhab.core.thing.Thing;
 import org.openhab.core.thing.ThingStatus;
 import org.openhab.core.thing.ThingStatusDetail;
 import org.openhab.core.thing.binding.BaseThingHandler;
+import org.openhab.core.thing.binding.ThingHandlerCallback;
 import org.openhab.core.thing.binding.builder.ChannelBuilder;
 import org.openhab.core.thing.binding.builder.ThingBuilder;
 import org.openhab.core.thing.type.ChannelTypeUID;
@@ -105,7 +108,7 @@ public class IPBridgeHandler extends BaseThingHandler {
     @Override
     public void initialize() {
         // Reset in case this handler instance is being reused after a manual dispose()/initialize()
-        // cycle (see thingUpdated()) rather than being replaced by the handler factory.
+        // cycle (see handleConfigurationUpdate()) rather than being replaced by the handler factory.
         isDisposed = false;
 
         this.config = getConfigAs(IPBridgeConfig.class);
@@ -420,20 +423,60 @@ public class IPBridgeHandler extends BaseThingHandler {
     }
 
     @Override
-    public void thingUpdated(Thing thing) {
-        IPBridgeConfig newConfig = thing.getConfiguration().as(IPBridgeConfig.class);
+    public void handleConfigurationUpdate(Map<String, Object> configurationParameters) {
+        if (!isModifyingCurrentConfig(configurationParameters)) {
+            return;
+        }
+        validateConfigurationParameters(configurationParameters);
+
+        Configuration configuration = editConfiguration();
+        for (Entry<String, Object> configurationParameter : configurationParameters.entrySet()) {
+            configuration.put(configurationParameter.getKey(), configurationParameter.getValue());
+        }
+
+        IPBridgeConfig newConfig = configuration.as(IPBridgeConfig.class);
         boolean validConfig = validConfiguration(newConfig);
         boolean needsReconnect = validConfig && !this.config.sameConnectionParameters(newConfig);
 
-        if (!validConfig || needsReconnect) {
-            dispose();
+        if (isInitialized()) {
+            if (!validConfig || needsReconnect) {
+                dispose();
+                updateConfiguration(configuration);
+                initialize();
+            } else {
+                updateConfiguration(configuration);
+                this.config = newConfig;
+                applyTimingConfig(newConfig);
+            }
+        } else {
+            // Mirrors BaseThingHandler's default behavior for the not-yet-initialized case.
+            updateConfiguration(configuration);
+            ThingHandlerCallback callback = getCallback();
+            if (callback != null) {
+                callback.configurationUpdated(getThing());
+            } else {
+                logger.warn("Handler {} tried updating its configuration although the handler was already disposed.",
+                        getClass().getSimpleName());
+            }
         }
+    }
 
-        this.thing = thing;
-        this.config = newConfig;
+    /**
+     * Applies reconnect/heartbeat/delay changes in place. The live session (if any) is left
+     * connected; only the keepalive job is rescheduled, and only if its interval actually
+     * changed. reconnectInterval and sendDelay are read fresh wherever they're used, so no
+     * further action is needed for those.
+     */
+    private void applyTimingConfig(IPBridgeConfig newConfig) {
+        reconnectInterval = (newConfig.reconnect > 0) ? newConfig.reconnect : DEFAULT_RECONNECT_MINUTES;
+        sendDelay = (newConfig.delay < 0) ? 0 : newConfig.delay;
 
-        if (needsReconnect) {
-            initialize();
+        int newHeartbeatInterval = (newConfig.heartbeat > 0) ? newConfig.heartbeat : DEFAULT_HEARTBEAT_MINUTES;
+        if (newHeartbeatInterval != heartbeatInterval) {
+            heartbeatInterval = newHeartbeatInterval;
+            if (this.session.isConnected()) {
+                scheduleKeepAlive(heartbeatInterval);
+            }
         }
     }
 
@@ -478,7 +521,9 @@ public class IPBridgeHandler extends BaseThingHandler {
     private void handlePortUpdate(int port, String status) {
         // Parameter is the port status (0 or 1) for the given port (1 based)
         BigDecimal state = new BigDecimal(status);
-        updateState(CHANNEL_PORTSTATUS + port, state.compareTo(BigDecimal.ZERO) == 0 ? OnOffType.OFF : OnOffType.ON);
+        OnOffType onOff = state.compareTo(BigDecimal.ZERO) == 0 ? OnOffType.OFF : OnOffType.ON;
+        logger.debug("{}: updating {}{} to {}", thing.getUID(), CHANNEL_PORTSTATUS, port, onOff);
+        updateState(CHANNEL_PORTSTATUS + port, onOff);
     }
 
     @Override

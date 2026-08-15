@@ -38,14 +38,18 @@ public class SynaccessBindingConstants {
     // List of all Thing Type UIDs. There is one Thing per physical PDU - connection and
     // switch/command channels are both owned by IPBridgeHandler.
     public static final ThingTypeUID THING_TYPE_IPBRIDGE = new ThingTypeUID(BINDING_ID, "ipbridge");
+    public static final ThingTypeUID THING_TYPE_HTTPBRIDGE = new ThingTypeUID(BINDING_ID, "httpbridge");
 
     // List of all Channel ids
     public static final String CHANNEL_PORTSTATUS = "portstatus";
     public static final String CHANNEL_ALLPORTS = "allports";
+    public static final String CHANNEL_LAST_SUCCESS = "lastSuccess";
+    public static final String CHANNEL_LAST_FAILURE = "lastFailure";
 
     public static final Set<ThingTypeUID> SUPPORTED_THING_TYPES_UIDS = new HashSet<>();
 
     static {
         SUPPORTED_THING_TYPES_UIDS.add(THING_TYPE_IPBRIDGE);
+        SUPPORTED_THING_TYPES_UIDS.add(THING_TYPE_HTTPBRIDGE);
     }
 }

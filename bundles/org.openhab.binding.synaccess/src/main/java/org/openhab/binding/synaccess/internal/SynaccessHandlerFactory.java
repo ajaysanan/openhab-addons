@@ -45,6 +45,9 @@ public class SynaccessHandlerFactory extends BaseThingHandlerFactory {
         if (thingTypeUID.equals(THING_TYPE_IPBRIDGE)) {
             return new IPBridgeHandler(thing);
         }
+        if (thingTypeUID.equals(THING_TYPE_HTTPBRIDGE)) {
+            return new HttpBridgeHandler(thing);
+        }
         return null;
     }
 }
