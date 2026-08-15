@@ -16,13 +16,7 @@ import java.io.BufferedReader;
 import java.io.IOException;
 import java.io.InputStreamReader;
 import java.io.OutputStreamWriter;
-import java.time.LocalDate;
-import java.time.format.DateTimeFormatter;
-import java.util.Collection;
-import java.util.Set;
 import java.util.TooManyListenersException;
-import java.util.concurrent.ScheduledFuture;
-import java.util.concurrent.TimeUnit;
 
 import org.openhab.core.io.transport.serial.PortInUseException;
 import org.openhab.core.io.transport.serial.SerialPort;
@@ -32,34 +26,23 @@ import org.openhab.core.io.transport.serial.SerialPortIdentifier;
 import org.openhab.core.io.transport.serial.SerialPortManager;
 import org.openhab.core.io.transport.serial.UnsupportedCommOperationException;
 import org.openhab.core.thing.Bridge;
-import org.openhab.core.thing.ChannelUID;
-import org.openhab.core.thing.Thing;
 import org.openhab.core.thing.ThingStatus;
 import org.openhab.core.thing.ThingStatusDetail;
-import org.openhab.core.thing.binding.BaseBridgeHandler;
-import org.openhab.core.thing.binding.ThingHandlerService;
-import org.openhab.core.types.Command;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 /**
- *
  * This is the main handler for HomeWorks RS232 Processors.
  *
  * @author Andrew Shilliday - Initial contribution
- *
+ * @author Ajay Sanan - Refactored onto the shared HwBridgeHandler base
  */
-public class HwSerialBridgeHandler extends BaseBridgeHandler implements SerialPortEventListener {
+public class HwSerialBridgeHandler extends HwBridgeHandler implements SerialPortEventListener {
     private final Logger logger = LoggerFactory.getLogger(HwSerialBridgeHandler.class);
-    private final DateTimeFormatter dateFormat = DateTimeFormatter.ofPattern("MM/dd/yyyy");
-    private final DateTimeFormatter timeFormat = DateTimeFormatter.ofPattern("HH:mm:ss");
 
     private String serialPortName;
     private int baudRate;
     private Boolean updateTime;
-    private ScheduledFuture<?> updateTimeJob;
-
-    private HwDiscoveryService discoveryService;
 
     private final SerialPortManager serialPortManager;
     private SerialPort serialPort;
@@ -95,10 +78,6 @@ public class HwSerialBridgeHandler extends BaseBridgeHandler implements SerialPo
         scheduler.execute(() -> openConnection());
     }
 
-    public void setDiscoveryService(HwDiscoveryService discoveryService) {
-        this.discoveryService = discoveryService;
-    }
-
     private void openConnection() {
         SerialPortIdentifier portIdentifier = serialPortManager.getIdentifier(serialPortName);
         if (portIdentifier == null) {
@@ -122,12 +101,7 @@ public class HwSerialBridgeHandler extends BaseBridgeHandler implements SerialPo
             serialPort.addEventListener(this);
             serialPort.notifyOnDataAvailable(true);
 
-            logger.debug("Sending monitoring commands.");
-            sendCommand("PROMPTOFF");
-            sendCommand("KBMOFF");
-            sendCommand("KLMOFF");
-            sendCommand("GSMOFF");
-            sendCommand("DLMON"); // Turn on dimmer monitoring
+            sendMonitorCommands();
 
             updateStatus(ThingStatus.ONLINE);
 
@@ -142,80 +116,6 @@ public class HwSerialBridgeHandler extends BaseBridgeHandler implements SerialPo
             updateStatus(ThingStatus.OFFLINE, ThingStatusDetail.COMMUNICATION_ERROR,
                     "Too many listeners to serial port.");
         }
-    }
-
-    private void startUpdateProcessorTimeJob() {
-        if (updateTimeJob != null) {
-            logger.debug("Canceling old scheduled job");
-            updateTimeJob.cancel(false);
-            updateTimeJob = null;
-        }
-
-        updateTimeJob = scheduler.scheduleWithFixedDelay(() -> updateProcessorTime(), 0, 1, TimeUnit.DAYS);
-    }
-
-    private void updateProcessorTime() {
-        LocalDate date = LocalDate.now();
-        String dateString = date.format(dateFormat);
-        String timeString = date.format(timeFormat);
-        logger.debug("Updating HomeWorks processor date and time to {} {}", dateString, timeString);
-
-        if (!this.getBridge().getStatus().equals(ThingStatus.ONLINE)) {
-            logger.warn("HomeWorks Bridge is offline and cannot update time on HomeWorks processor.");
-            if (updateTimeJob != null) {
-                updateTimeJob.cancel(false);
-                updateTimeJob = null;
-            }
-            return;
-        }
-
-        sendCommand("SD, " + dateString);
-        sendCommand("ST, " + timeString);
-    }
-
-    @Override
-    public Collection<Class<? extends ThingHandlerService>> getServices() {
-        return Set.of(HwDiscoveryService.class);
-    }
-
-    @Override
-    public void handleCommand(ChannelUID channelUID, Command command) {
-        logger.debug("Unexpected command for HomeWorks Bridge: {} - {}", channelUID, command);
-    }
-
-    private void handleIncomingMessage(String line) {
-        if (line == null || line.isEmpty()) {
-            return;
-        }
-
-        logger.debug("Received message from HomeWorks processor: {}", line);
-        String[] data = line.replaceAll("\\s", "").toUpperCase().split(",");
-        if ("DL".equals(data[0])) {
-            try {
-                String address = data[1];
-                Integer level = Integer.parseInt(data[2]);
-                HwDimmerHandler handler = findHandler(address);
-                if (handler == null) {
-                    discoveryService.declareUnknownDimmer(address);
-                } else {
-                    handler.handleLevelChange(level);
-                }
-            } catch (RuntimeException e) {
-                logger.error("Error parsing incoming message", e);
-            }
-        }
-    }
-
-    private HwDimmerHandler findHandler(String address) {
-        for (Thing thing : getThing().getThings()) {
-            if (thing.getHandler() instanceof HwDimmerHandler) {
-                HwDimmerHandler handler = (HwDimmerHandler) thing.getHandler();
-                if (address.equals(handler.getAddress())) {
-                    return handler;
-                }
-            }
-        }
-        return null;
     }
 
     /**
@@ -241,6 +141,7 @@ public class HwSerialBridgeHandler extends BaseBridgeHandler implements SerialPo
         }
     }
 
+    @Override
     public void sendCommand(String command) {
         try {
             logger.debug("HomeWorks bridge sending command: {}", command);
@@ -262,10 +163,6 @@ public class HwSerialBridgeHandler extends BaseBridgeHandler implements SerialPo
         serialPort = null;
         serialInput = null;
         serialOutput = null;
-
-        if (updateTimeJob != null) {
-            updateTimeJob.cancel(false);
-        }
 
         logger.debug("Finished disposing bridge.");
     }

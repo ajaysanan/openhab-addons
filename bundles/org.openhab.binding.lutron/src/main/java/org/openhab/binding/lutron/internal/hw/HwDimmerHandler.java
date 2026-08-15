@@ -1,4 +1,4 @@
-/*
+/**
  * Copyright (c) 2010-2026 Contributors to the openHAB project
  *
  * See the NOTICE file(s) distributed with this work for additional
@@ -13,27 +13,31 @@
 package org.openhab.binding.lutron.internal.hw;
 
 import static org.openhab.binding.lutron.internal.LutronBindingConstants.CHANNEL_LIGHTLEVEL;
+import static org.openhab.binding.lutron.internal.hw.HwConstants.*;
+
+import java.util.concurrent.TimeUnit;
 
 import org.openhab.core.library.types.OnOffType;
 import org.openhab.core.library.types.PercentType;
-import org.openhab.core.thing.Bridge;
 import org.openhab.core.thing.ChannelUID;
 import org.openhab.core.thing.Thing;
 import org.openhab.core.thing.ThingStatus;
 import org.openhab.core.thing.ThingStatusDetail;
-import org.openhab.core.thing.binding.BaseThingHandler;
 import org.openhab.core.types.Command;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 /**
  * This class extends the BaseThingHandler to support HomeWorks Dimmer modules.
  *
  * @author Andrew Shilliday - Initial contribution
- *
+ * @author Ajay Sanan - Refactored onto the shared HwDeviceHandler base
  */
-public class HwDimmerHandler extends BaseThingHandler {
-    private String address;
+public class HwDimmerHandler extends HwDeviceHandler {
     private Integer fadeTime = 1;
     private Integer defaultLevel = 100;
+
+    private final Logger logger = LoggerFactory.getLogger(HwDimmerHandler.class);
 
     public HwDimmerHandler(Thing thing) {
         super(thing);
@@ -43,11 +47,14 @@ public class HwDimmerHandler extends BaseThingHandler {
     public void initialize() {
         HwDimmerConfig config = getThing().getConfiguration().as(HwDimmerConfig.class);
 
-        address = config.getAddress();
+        String address = config.getAddress();
+        setAddress(address);
         if (address == null || address.isEmpty()) {
             updateStatus(ThingStatus.OFFLINE, ThingStatusDetail.CONFIGURATION_ERROR, "Address not set");
             return;
         }
+
+        logger.debug("Initializing Dimmer Handler for address {}", address);
 
         fadeTime = config.getFadeTime();
         defaultLevel = config.getDefaultLevel();
@@ -57,12 +64,13 @@ public class HwDimmerHandler extends BaseThingHandler {
             return;
         }
 
-        updateStatus(ThingStatus.ONLINE);
-        queryLevel();
+        updateStatus(ThingStatus.UNKNOWN);
+
+        scheduler.schedule(this::initDeviceState, 3, TimeUnit.SECONDS);
     }
 
-    public String getAddress() {
-        return address;
+    public void initDeviceState() {
+        queryLevel();
     }
 
     @Override
@@ -79,40 +87,18 @@ public class HwDimmerHandler extends BaseThingHandler {
         }
     }
 
-    private HwSerialBridgeHandler getBridgeHandler() {
-        Bridge bridge = getBridge();
-        if (bridge == null) {
-            return null;
-        } else if (!(bridge.getHandler() instanceof HwSerialBridgeHandler)) {
-            return null;
-        } else {
-            return (HwSerialBridgeHandler) bridge.getHandler();
-        }
-    }
-
     private void queryLevel() {
-        HwSerialBridgeHandler bridgeHandler = getBridgeHandler();
-        if (bridgeHandler == null) {
-            updateStatus(ThingStatus.OFFLINE, ThingStatusDetail.HANDLER_MISSING_ERROR, "No bridge associated");
-            return;
-        }
-
-        String cmd = String.format("RDL, %s", address);
-        bridgeHandler.sendCommand(cmd);
+        sendToBridge(String.format("%s, %s", HW_COMMAND_ZONEGET, getAddress()));
     }
 
     private void outputLevel(Number level) {
-        HwSerialBridgeHandler bridgeHandler = getBridgeHandler();
-        if (bridgeHandler == null) {
-            updateStatus(ThingStatus.OFFLINE, ThingStatusDetail.HANDLER_MISSING_ERROR, "No bridge associated");
-            return;
-        }
-
-        String cmd = String.format("FADEDIM, %s, %s, 0, %s", level, fadeTime, address);
-        bridgeHandler.sendCommand(cmd);
+        sendToBridge(String.format("%s, %s, %s, 0, %s", HW_COMMAND_ZONECHANGE, level, fadeTime, getAddress()));
     }
 
-    public void handleLevelChange(Integer level) {
+    public void handleUpdate(Integer level) {
+        if (getThing().getStatus() == ThingStatus.UNKNOWN) {
+            updateStatus(ThingStatus.ONLINE); // set thing status online if this is an initial response
+        }
         updateState(CHANNEL_LIGHTLEVEL, new PercentType(level));
     }
 }

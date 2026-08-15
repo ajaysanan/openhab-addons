@@ -1,4 +1,4 @@
-/*
+/**
  * Copyright (c) 2010-2026 Contributors to the openHAB project
  *
  * See the NOTICE file(s) distributed with this work for additional
@@ -21,6 +21,7 @@ import org.openhab.binding.lutron.internal.LutronHandlerFactory;
 import org.openhab.core.config.discovery.AbstractThingHandlerDiscoveryService;
 import org.openhab.core.config.discovery.DiscoveryResult;
 import org.openhab.core.config.discovery.DiscoveryResultBuilder;
+import org.openhab.core.thing.ThingTypeUID;
 import org.openhab.core.thing.ThingUID;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -33,14 +34,15 @@ import org.slf4j.LoggerFactory;
  * with the dimmer status and it will be discovered.
  *
  * @author Andrew Shilliday - Initial contribution
+ * @author Ajay Sanan - Generalized to support both serial and IP bridges, and non-dimmer device types
  */
-public class HwDiscoveryService extends AbstractThingHandlerDiscoveryService<@NonNull HwSerialBridgeHandler> {
-    private Logger logger = LoggerFactory.getLogger(HwDiscoveryService.class);
+public class HwDiscoveryService extends AbstractThingHandlerDiscoveryService<@NonNull HwBridgeHandler> {
+    private final Logger logger = LoggerFactory.getLogger(HwDiscoveryService.class);
 
     private final AtomicBoolean isScanning = new AtomicBoolean(false);
 
     public HwDiscoveryService() {
-        super(HwSerialBridgeHandler.class, LutronHandlerFactory.HW_DISCOVERABLE_DEVICE_TYPES_UIDS, 10);
+        super(HwBridgeHandler.class, LutronHandlerFactory.HW_DISCOVERABLE_DEVICE_TYPES_UIDS, 10);
     }
 
     @Override
@@ -72,16 +74,16 @@ public class HwDiscoveryService extends AbstractThingHandlerDiscoveryService<@No
     }
 
     /**
-     * Called by the bridge when it receives a status update for a dimmer that is not registered.
+     * Called by the bridge when it receives a status update for a device that is not registered.
      */
-    public void declareUnknownDimmer(String address) {
+    public void declareUnknownDevice(ThingTypeUID newThingTypeUID, String address) {
         if (address == null) {
-            logger.info("Discovered HomeWorks dimmer with no address or thing handler");
+            logger.info("Discovered HomeWorks device with no address");
             return;
         }
         String addressUid = address.replaceAll("[\\[\\]]", "").replace(":", "-");
         ThingUID bridgeUID = thingHandler.getThing().getUID();
-        ThingUID uid = new ThingUID(HwConstants.THING_TYPE_HWDIMMER, bridgeUID, addressUid);
+        ThingUID uid = new ThingUID(newThingTypeUID, bridgeUID, addressUid);
 
         Map<String, Object> props = new HashMap<>();
 

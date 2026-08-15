@@ -1099,9 +1099,74 @@
 		</config-description>
 	</bridge-type>
 
+	<bridge-type id="hwipbridge">
+	    <label>Lutron HomeWorks IP Bridge</label>
+	    <description>Ethernet access point to legacy Lutron HomeWorks lighting control system</description>
+	    <semantic-equipment-tag>NetworkAppliance</semantic-equipment-tag>
+	    <properties>
+	        <property name="vendor">Lutron</property>
+	    </properties>
+	
+	    <representation-property>ipAddress</representation-property>
+	
+	    <config-description>
+	        <parameter name="ipAddress" type="text" required="true">
+	            <context>network-address</context>
+	            <label>IP or Host Name</label>
+	            <description>The IP address or host name of the HomeWorks processor's Ethernet interface</description>
+	        </parameter>
+	        <parameter name="port" type="integer" required="true">
+	            <context>network-address</context>
+	            <label>Port</label>
+	            <description>The TCP port of the HomeWorks processor's Ethernet interface</description>
+	            <default>23</default>
+	        </parameter>
+	        <parameter name="user" type="text">
+	            <label>User Name</label>
+	            <description>The user name for the network login account, if one is configured on the HomeWorks processor</description>
+	        </parameter>
+	        <parameter name="password" type="text">
+	            <context>password</context>
+	            <label>Password</label>
+	            <description>The password for the network login account, if one is configured on the HomeWorks processor</description>
+	        </parameter>
+	        <parameter name="reconnect" type="integer" min="1" max="60" unit="min">
+	            <label>Reconnect Interval</label>
+	            <description>The period in minutes that the handler will wait between connection attempts</description>
+	            <unitLabel>minutes</unitLabel>
+	            <default>5</default>
+	            <advanced>true</advanced>
+	        </parameter>
+	        <parameter name="heartbeat" type="integer" min="1" max="60" unit="min">
+	            <label>Keepalive Heartbeat Interval</label>
+	            <description>The period in minutes between connection heartbeat checks</description>
+	            <unitLabel>minutes</unitLabel>
+	            <default>15</default>
+	            <advanced>true</advanced>
+	        </parameter>
+	        <parameter name="delay" type="integer" min="0" max="250" unit="ms">
+	            <label>Send Delay</label>
+	            <description>The delay in milliseconds between sending integration commands (for throttling)</description>
+	            <unitLabel>ms</unitLabel>
+	            <default>0</default>
+	            <advanced>true</advanced>
+	        </parameter>
+	        <parameter name="updateTime" type="boolean" required="false">
+	            <default>true</default>
+	            <label>Update Processor Time</label>
+	            <description>
+	                The older HomeWorks processors seem to have difficulty keeping track of the time, especially where
+	                daylight savings is concerned. If this option is selected, the HomeWorks bridge will automatically
+	                update the processor on initialization and once per day thereafter.
+	            </description>
+	        </parameter>
+	    </config-description>
+	</bridge-type>
+
 	<thing-type id="hwdimmer">
 		<supported-bridge-type-refs>
 			<bridge-type-ref id="hwserialbridge"/>
+			<bridge-type-ref id="hwipbridge"/>
 		</supported-bridge-type-refs>
 
 		<label>Lutron Dimmer (Legacy HomeWorks)</label>
@@ -1128,6 +1193,75 @@
 				<default>100</default>
 			</parameter>
 		</config-description>
+	</thing-type>
+
+	<thing-type id="hwkeypad">
+	    <supported-bridge-type-refs>
+	        <bridge-type-ref id="hwserialbridge"/>
+	        <bridge-type-ref id="hwipbridge"/>
+	    </supported-bridge-type-refs>
+	    <label>seeTouch Keypad</label>
+	    <description>Lutron seeTouch/Hybrid seeTouch wall keypad</description>
+	    <channel-groups>
+	        <channel-group id="buttons" typeId="keypadbuttons"/>
+	        <channel-group id="buttonevents" typeId="keypadevents"/>
+	        <channel-group id="leds" typeId="keypadleds"/>
+	        <channel-group id="status" typeId="keypadstatus"/>
+	    </channel-groups>
+	    <representation-property>address</representation-property>
+	    <config-description>
+	        <parameter name="address" type="text" required="true">
+	            <label>Address</label>
+	            <description>Address of keypad in the Lutron lighting system</description>
+	        </parameter>
+	        <parameter name="autorelease" type="boolean">
+	            <label>Auto-release</label>
+	            <description>Automatically release pressed buttons</description>
+	            <default>true</default>
+	        </parameter>
+	    </config-description>
+	</thing-type>
+
+	<thing-type id="hwkeypad">
+	    <supported-bridge-type-refs>
+	        <bridge-type-ref id="hwserialbridge"/>
+	        <bridge-type-ref id="hwipbridge"/>
+	    </supported-bridge-type-refs>
+	    <label>seeTouch Keypad</label>
+	    <description>Lutron seeTouch wired wall keypad (legacy HomeWorks)</description>
+	    <channels>
+	        <channel id="lastkeypressed" typeId="buttonpress"/>
+	        <channel id="keypadenabled" typeId="switchState"/>
+	    </channels>
+	    <representation-property>address</representation-property>
+	    <config-description>
+	        <parameter name="address" type="text" required="true">
+	            <label>Address</label>
+	            <description>Address of keypad in the Lutron lighting system</description>
+	        </parameter>
+	        <parameter name="model" type="text">
+	            <label>Keypad Model</label>
+	            <description>Keypad model number without the ST- prefix or insert/no-insert suffix</description>
+	            <options>
+	                <option value="1B">1B</option>
+	                <option value="2B">2B</option>
+	                <option value="3B">3B</option>
+	                <option value="3BRL">3BRL</option>
+	                <option value="4B">4B</option>
+	                <option value="4FS">4FS</option>
+	                <option value="4S">4S</option>
+	                <option value="4SIR">4SIR</option>
+	                <option value="5B">5B</option>
+	                <option value="5FS">5FS</option>
+	                <option value="5BRL">5BRL</option>
+	                <option value="6B">6B</option>
+	                <option value="6BRL">6BRL</option>
+	                <option value="7B">7B</option>
+	                <option value="Generic">Generic</option>
+	            </options>
+	            <default>Generic</default>
+	        </parameter>
+	    </config-description>
 	</thing-type>
 
 	<bridge-type id="ra-rs232">
