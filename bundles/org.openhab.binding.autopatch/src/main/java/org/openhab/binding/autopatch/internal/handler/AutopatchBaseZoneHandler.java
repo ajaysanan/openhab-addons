@@ -12,6 +12,8 @@
  */
 package org.openhab.binding.autopatch.internal.handler;
 
+import java.util.Map;
+import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.TimeUnit;
 
 import org.eclipse.jdt.annotation.NonNullByDefault;
@@ -32,6 +34,8 @@ import org.openhab.core.thing.ThingStatusInfo;
 import org.openhab.core.thing.binding.BaseThingHandler;
 import org.openhab.core.types.Command;
 import org.openhab.core.types.RefreshType;
+import org.openhab.core.types.State;
+import org.openhab.core.types.UnDefType;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -45,6 +49,7 @@ import org.slf4j.LoggerFactory;
 public abstract class AutopatchBaseZoneHandler extends BaseThingHandler {
 
     private final Logger logger = LoggerFactory.getLogger(AutopatchBaseZoneHandler.class);
+    private final Map<String, State> lastKnownState = new ConcurrentHashMap<>();
 
     private AutopatchZoneConfig configuration = new AutopatchZoneConfig();
 
@@ -125,7 +130,7 @@ public abstract class AutopatchBaseZoneHandler extends BaseThingHandler {
     public void bridgeStatusChanged(ThingStatusInfo bridgeStatusInfo) {
         if (bridgeStatusInfo.getStatus().equals(ThingStatus.ONLINE)) {
             finalizeZoneStatus();
-        } else if (bridgeStatusInfo.getStatus().equals(ThingStatus.OFFLINE)) {
+        } else {
             updateStatus(ThingStatus.OFFLINE, ThingStatusDetail.BRIDGE_OFFLINE);
         }
     }
@@ -186,13 +191,24 @@ public abstract class AutopatchBaseZoneHandler extends BaseThingHandler {
         }
     }
 
+    @Override
+    protected void updateState(String channelId, State state) {
+        lastKnownState.put(channelId, state);
+        super.updateState(channelId, state);
+    }
+
     public void updateChannel(String channelId) {
-        if (isLinked(channelId)) {
+        if (isLinked(channelId) && isChannelStale(channelId)) {
             CommandType command = BCSCommand.getCommandType(channelId);
             if (command != null) {
                 sendMessage(BCSFunctions.buildStatusCommand(command, zoneLevel, zoneNumber.toString()));
             }
         }
+    }
+
+    private boolean isChannelStale(String channelId) {
+        State state = lastKnownState.get(channelId);
+        return state == null || state instanceof UnDefType;
     }
 
     protected abstract void handleStateChange(BCSDecode bcs, int index);
