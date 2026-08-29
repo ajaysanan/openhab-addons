@@ -81,7 +81,6 @@ public class HttpBridgeHandler extends BaseThingHandler {
     private HttpBridgeConfig config = new HttpBridgeConfig();
 
     private int pollIntervalMinutes;
-    private int sendDelayMillis;
 
     private String baseUrl = "";
     private String authHeader = "";
@@ -104,7 +103,6 @@ public class HttpBridgeHandler extends BaseThingHandler {
         }
 
         pollIntervalMinutes = (config.pollInterval > 0) ? config.pollInterval : DEFAULT_HEARTBEAT_MINUTES;
-        sendDelayMillis = (config.delay < 0) ? 0 : config.delay;
 
         int httpPort = (config.port > 0) ? config.port : DEFAULT_HTTP_PORT;
         this.baseUrl = "http://" + config.ipAddress + ":" + httpPort + "/cmd.cgi";
@@ -151,11 +149,6 @@ public class HttpBridgeHandler extends BaseThingHandler {
 
         String body = response.body().trim();
         logger.trace("{} received response: -->{}<--", thing.getUID(), body);
-
-        if (sendDelayMillis > 0) {
-            Thread.sleep(sendDelayMillis); // throttle command rate if configured
-        }
-
         return body;
     }
 
@@ -270,7 +263,6 @@ public class HttpBridgeHandler extends BaseThingHandler {
      */
     private void applyTimingConfig(HttpBridgeConfig newConfig) {
         int newPollInterval = (newConfig.pollInterval > 0) ? newConfig.pollInterval : DEFAULT_HEARTBEAT_MINUTES;
-        sendDelayMillis = (newConfig.delay < 0) ? 0 : newConfig.delay;
 
         if (newPollInterval != pollIntervalMinutes) {
             pollIntervalMinutes = newPollInterval;
@@ -415,6 +407,15 @@ public class HttpBridgeHandler extends BaseThingHandler {
 
             if (!"$A0".equals(response)) {
                 logger.warn("{}: command '{}' was rejected by the device: {}", thing.getUID(), command, response);
+            }
+
+            if (COMMAND_SEND_DELAY_MILLIS > 0) {
+                try {
+                    Thread.sleep(COMMAND_SEND_DELAY_MILLIS);
+                } catch (InterruptedException e) {
+                    Thread.currentThread().interrupt();
+                    return;
+                }
             }
 
             poll();

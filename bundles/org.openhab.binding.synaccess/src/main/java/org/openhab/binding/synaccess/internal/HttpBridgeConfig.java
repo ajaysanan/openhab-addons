@@ -26,7 +26,6 @@ public class HttpBridgeConfig {
     public String user = "";
     public String password = "";
     public int pollInterval;
-    public int delay = 0;
 
     public boolean sameConnectionParameters(HttpBridgeConfig config) {
         return ipAddress.equals(config.ipAddress) && user.equals(config.user) && password.equals(config.password)

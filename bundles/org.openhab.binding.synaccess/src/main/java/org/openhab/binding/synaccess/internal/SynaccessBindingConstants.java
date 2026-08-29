@@ -34,6 +34,9 @@ public class SynaccessBindingConstants {
     public static final int DEFAULT_RECONNECT_MINUTES = 5;
     public static final int DEFAULT_HEARTBEAT_MINUTES = 5;
     public static final long KEEPALIVE_TIMEOUT_SECONDS = 30;
+    // Settling delay guards against reading back stale state: a command's acknowledgment can arrive slightly before the
+    // device has actually finished applying it
+    public static final int COMMAND_SEND_DELAY_MILLIS = 500;
 
     // List of all Thing Type UIDs. There is one Thing per physical PDU - connection and
     // switch/command channels are both owned by IPBridgeHandler.

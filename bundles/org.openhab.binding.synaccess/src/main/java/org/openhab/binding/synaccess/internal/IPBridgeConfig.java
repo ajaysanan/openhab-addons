@@ -27,7 +27,6 @@ public class IPBridgeConfig {
     public String password = "";
     public int reconnect;
     public int heartbeat;
-    public int delay = 0;
 
     public boolean sameConnectionParameters(IPBridgeConfig config) {
         return ipAddress.equals(config.ipAddress) && user.equals(config.user) && password.equals(config.password)

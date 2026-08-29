@@ -71,7 +71,6 @@ public class IPBridgeHandler extends BaseThingHandler {
 
     private int reconnectInterval;
     private int heartbeatInterval;
-    private int sendDelay;
 
     private boolean authRequired;
 
@@ -115,7 +114,6 @@ public class IPBridgeHandler extends BaseThingHandler {
         if (validConfiguration(this.config)) {
             reconnectInterval = (config.reconnect > 0) ? config.reconnect : DEFAULT_RECONNECT_MINUTES;
             heartbeatInterval = (config.heartbeat > 0) ? config.heartbeat : DEFAULT_HEARTBEAT_MINUTES;
-            sendDelay = (config.delay < 0) ? 0 : config.delay;
 
             updateStatus(ThingStatus.OFFLINE, ThingStatusDetail.NONE, "Connecting");
             // start the async connect task so can return quickly
@@ -233,8 +231,8 @@ public class IPBridgeHandler extends BaseThingHandler {
                     connectError(ThingStatusDetail.COMMUNICATION_ERROR, e.getMessage());
                     break;
                 }
-                if (sendDelay > 0) {
-                    Thread.sleep(sendDelay); // introduce delay to throttle send rate
+                if (COMMAND_SEND_DELAY_MILLIS > 0) {
+                    Thread.sleep(COMMAND_SEND_DELAY_MILLIS);
                 }
             }
         } catch (InterruptedException e) {
@@ -469,7 +467,6 @@ public class IPBridgeHandler extends BaseThingHandler {
      */
     private void applyTimingConfig(IPBridgeConfig newConfig) {
         reconnectInterval = (newConfig.reconnect > 0) ? newConfig.reconnect : DEFAULT_RECONNECT_MINUTES;
-        sendDelay = (newConfig.delay < 0) ? 0 : newConfig.delay;
 
         int newHeartbeatInterval = (newConfig.heartbeat > 0) ? newConfig.heartbeat : DEFAULT_HEARTBEAT_MINUTES;
         if (newHeartbeatInterval != heartbeatInterval) {
