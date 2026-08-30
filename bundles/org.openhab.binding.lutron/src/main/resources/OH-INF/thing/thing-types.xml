@@ -1047,8 +1047,13 @@
 	</thing-type>
 
 	<bridge-type id="hwserialbridge">
-		<label>Lutron HomeWorks RS232 Bridge</label>
-		<description>RS232 access point to Legacy Lutron HomeWorks lighting control system</description>
+	    <label>Legacy Homeworks Serial Bridge</label>
+	    <description>RS232 access point to legacy Lutron HomeWorks lighting control system</description>
+
+        <channels>
+            <channel id="vacationmode" typeId="vacationMode"/>
+            <channel id="vacationprogress" typeId="vacationProgress"/>
+        </channels>
 
 		<config-description>
 			<parameter name="serialPort" type="text" required="true">
@@ -1100,15 +1105,21 @@
 	</bridge-type>
 
 	<bridge-type id="hwipbridge">
-	    <label>Lutron HomeWorks IP Bridge</label>
+	    <label>Legacy Homeworks IP Bridge</label>
 	    <description>Ethernet access point to legacy Lutron HomeWorks lighting control system</description>
 	    <semantic-equipment-tag>NetworkAppliance</semantic-equipment-tag>
+	    
+	    <channels>
+            <channel id="vacationmode" typeId="vacationMode"/>
+            <channel id="vacationprogress" typeId="vacationProgress"/>
+        </channels>
+        
 	    <properties>
 	        <property name="vendor">Lutron</property>
 	    </properties>
 	
 	    <representation-property>ipAddress</representation-property>
-	
+
 	    <config-description>
 	        <parameter name="ipAddress" type="text" required="true">
 	            <context>network-address</context>
@@ -1164,13 +1175,12 @@
 	</bridge-type>
 
 	<thing-type id="hwdimmer">
-		<supported-bridge-type-refs>
-			<bridge-type-ref id="hwserialbridge"/>
-			<bridge-type-ref id="hwipbridge"/>
-		</supported-bridge-type-refs>
-
-		<label>Lutron Dimmer (Legacy HomeWorks)</label>
-		<description>Controls dimmable loads for legacy HomeWorks systems</description>
+	    <supported-bridge-type-refs>
+	        <bridge-type-ref id="hwserialbridge"/>
+	        <bridge-type-ref id="hwipbridge"/>
+	    </supported-bridge-type-refs>
+	    <label>Legacy Homeworks Dimmer</label>
+	    <description>Controls dimmable loads for legacy HomeWorks systems</description>
 		<category>Lightbulb</category>
 		<semantic-equipment-tag>LightSource</semantic-equipment-tag>
 		<channels>
@@ -1195,29 +1205,29 @@
 		</config-description>
 	</thing-type>
 
-	<thing-type id="hwkeypad">
+	<thing-type id="hwswitch">
 	    <supported-bridge-type-refs>
 	        <bridge-type-ref id="hwserialbridge"/>
 	        <bridge-type-ref id="hwipbridge"/>
 	    </supported-bridge-type-refs>
-	    <label>seeTouch Keypad</label>
-	    <description>Lutron seeTouch/Hybrid seeTouch wall keypad</description>
-	    <channel-groups>
-	        <channel-group id="buttons" typeId="keypadbuttons"/>
-	        <channel-group id="buttonevents" typeId="keypadevents"/>
-	        <channel-group id="leds" typeId="keypadleds"/>
-	        <channel-group id="status" typeId="keypadstatus"/>
-	    </channel-groups>
+        <label>Legacy Homeworks Switch</label>
+        <description>A HomeWorks dimmer address internally programmed as an on/off switch</description>
+	    <category>WallSwitch</category>
+	    <semantic-equipment-tag>WallSwitch</semantic-equipment-tag>
+	    <channels>
+	        <channel id="switchstatus" typeId="switchState"/>
+	    </channels>
 	    <representation-property>address</representation-property>
 	    <config-description>
 	        <parameter name="address" type="text" required="true">
 	            <label>Address</label>
-	            <description>Address of keypad in the Lutron lighting system</description>
+	            <description>Address of switch in the Lutron lighting system</description>
 	        </parameter>
-	        <parameter name="autorelease" type="boolean">
-	            <label>Auto-release</label>
-	            <description>Automatically release pressed buttons</description>
-	            <default>true</default>
+	        <parameter name="fadeTime" type="integer" min="0">
+	            <label>Fade Time</label>
+	            <description>Fade time in seconds</description>
+	            <default>1</default>
+	            <advanced>true</advanced>
 	        </parameter>
 	    </config-description>
 	</thing-type>
@@ -1227,8 +1237,8 @@
 	        <bridge-type-ref id="hwserialbridge"/>
 	        <bridge-type-ref id="hwipbridge"/>
 	    </supported-bridge-type-refs>
-	    <label>seeTouch Keypad</label>
-	    <description>Lutron seeTouch wired wall keypad (legacy HomeWorks)</description>
+        <label>Legacy Homeworks Keypad</label>
+        <description>Lutron seeTouch wired wall keypad (legacy HomeWorks)</description>
 	    <channels>
 	        <channel id="lastkeypressed" typeId="buttonpress"/>
 	        <channel id="keypadenabled" typeId="switchState"/>
@@ -1241,22 +1251,31 @@
 	        </parameter>
 	        <parameter name="model" type="text">
 	            <label>Keypad Model</label>
-	            <description>Keypad model number without the ST- prefix or insert/no-insert suffix</description>
+	            <description>Keypad style (seeTouch/seeTouch RF, Signature, Architrave, European)</description>
 	            <options>
-	                <option value="1B">1B</option>
-	                <option value="2B">2B</option>
-	                <option value="3B">3B</option>
-	                <option value="3BRL">3BRL</option>
-	                <option value="4B">4B</option>
-	                <option value="4FS">4FS</option>
-	                <option value="4S">4S</option>
-	                <option value="4SIR">4SIR</option>
-	                <option value="5B">5B</option>
-	                <option value="5FS">5FS</option>
-	                <option value="5BRL">5BRL</option>
-	                <option value="6B">6B</option>
-	                <option value="6BRL">6BRL</option>
-	                <option value="7B">7B</option>
+	                <option value="1B">1 Button (seeTouch 1B)</option>
+	                <option value="2B">2 Button (seeTouch 2B)</option>
+                    <option value="2SE">2 Button (European 2SE)</option>
+                    <option value="2Barch">2 Button (Architectural 2B)</option>
+	                <option value="3B">3 Button (seeTouch/Signature 3B)</option>
+	                <option value="3BRL">3 Button with Raise/Lower (seeTouch 3BRL)</option>
+	                <option value="4B">4 Button (seeTouch/Signature 4B)</option>
+	                <option value="4FS">4 Button, 2 Scene (seeTouch 4FS)</option>
+	                <option value="4S">4 Button, 1 Scene with Raise/Lower (seeTouch 4S/4SIR, European 4SE/4SE-IR)</option>            
+	                <option value="5B">5 Button (seeTouch 5B)</option>
+	                <option value="5FS">5 Button, 1 Scene (seeTouch 5FS)</option>
+	                <option value="5BRL">5 Button with Raise/Lower (seeTouch 5BRL, Slim KP5, Architrave KP5)</option>
+                    <option value="5S2RL">5 Button, 2 Scene with Raise/Lower (RF 5S2RL/5RL)</option>
+	                <option value="6B">6 Button (seeTouch 6B)</option>
+                    <option value="LB6">6 Button (Large Button LB6)</option>
+                    <option value="6BRL">6 Button with Raise/Lower (seeTouch 6BRL, RF 6LRL)</option>
+	                <option value="7B">7 Button (seeTouch 7B)</option>
+                    <option value="8SE">8 Button, 1 Scene with Raise/Lower (European 8SE/8SE-IR)</option>
+                    <option value="LB9">9 Button (Large Button LB9)</option>
+	                <option value="KP10">10 Button with Raise/Lower (Slim KP10)</option>
+                    <option value="10S2RL">10 Button, 2 Scene with Raise/Lower (RF 10S2RL/10RL)</option>
+                    <option value="KP15">15 Button with Raise/Lower (Slim KP15)</option>
+                    <option value="15S2RL">15 Button, 2 Scene with Raise/Lower (RF 15S2RL/15RL)</option>
 	                <option value="Generic">Generic</option>
 	            </options>
 	            <default>Generic</default>
@@ -1649,6 +1668,26 @@
 		<label>Sequence Scenes</label>
 		<description>Adds/Removes sequencing of scenes</description>
 		<category>Scene</category>
+	</channel-type>
+
+	<channel-type id="vacationProgress">
+	    <item-type>Number:Dimensionless</item-type>
+	    <label>Vacation Recording Progress</label>
+	    <description>Percentage of vacation mode recording slots filled</description>
+	    <state readOnly="true" pattern="%d %%"/>
+	</channel-type>
+
+	<channel-type id="vacationMode">
+	    <item-type>String</item-type>
+	    <label>Vacation Mode</label>
+	    <description>Control and monitor HomeWorks vacation mode</description>
+	    <state>
+	        <options>
+	            <option value="RECORD">Record</option>
+	            <option value="PLAY">Play</option>
+	            <option value="DISABLE">Disable</option>
+	        </options>
+	    </state>
 	</channel-type>
 
 	<channel-type id="zonelock">

@@ -20,8 +20,6 @@ import org.openhab.core.thing.ThingStatusDetail;
 import org.openhab.core.thing.binding.BaseThingHandler;
 import org.openhab.core.thing.binding.BridgeHandler;
 import org.openhab.core.types.Command;
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
 
 /**
  * Base handler for HomeWorks device things (dimmers, keypads) that share an address and forward commands to a
@@ -30,7 +28,6 @@ import org.slf4j.LoggerFactory;
  * @author Ajay Sanan - Initial contribution
  */
 public abstract class HwDeviceHandler extends BaseThingHandler {
-    private final Logger logger = LoggerFactory.getLogger(HwDeviceHandler.class);
 
     private String address;
 
@@ -39,7 +36,27 @@ public abstract class HwDeviceHandler extends BaseThingHandler {
     }
 
     public void setAddress(String address) {
-        this.address = address;
+        this.address = normalizeAddress(address);
+    }
+
+    public static String normalizeAddress(String address) {
+        if (address == null) {
+            return null;
+        }
+        String stripped = address.replaceAll("[\\[\\]\\s]", "");
+        String[] parts = stripped.split(":");
+        StringBuilder normalized = new StringBuilder();
+        for (int i = 0; i < parts.length; i++) {
+            if (i > 0) {
+                normalized.append(':');
+            }
+            try {
+                normalized.append(Integer.parseInt(parts[i]));
+            } catch (NumberFormatException e) {
+                normalized.append(parts[i]); // leave anything non-numeric untouched
+            }
+        }
+        return normalized.toString();
     }
 
     public String getAddress() {

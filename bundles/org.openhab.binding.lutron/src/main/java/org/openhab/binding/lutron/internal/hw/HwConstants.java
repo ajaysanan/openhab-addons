@@ -29,10 +29,15 @@ public class HwConstants {
     public static final ThingTypeUID THING_TYPE_HWIPBRIDGE = new ThingTypeUID(BINDING_ID, "hwipbridge");
     public static final ThingTypeUID THING_TYPE_HWDIMMER = new ThingTypeUID(BINDING_ID, "hwdimmer");
     public static final ThingTypeUID THING_TYPE_HWKEYPAD = new ThingTypeUID(BINDING_ID, "hwkeypad");
+    public static final ThingTypeUID THING_TYPE_HWSWITCH = new ThingTypeUID(BINDING_ID, "hwswitch");
+
+    // Bridge properties
+    public static final String HW_PROPERTY_BOOTREV = "bootRevision";
+    public static final String HW_PROPERTY_PROCESSORADDRESS = "processorAddress";
 
     // Dimmer commands
     public static final String HW_COMMAND_ZONECHANGE = "FADEDIM";
-    // Not much of a use case for Start/Stop Raise/Lower of Dimmer
+    // Not much of a use case for Start/Stop Raise/Lower of Dimmer from inside OH
     // public static final String HW_COMMAND_ZONERAISE = "RAISEDIM, ";
     // public static final String HW_COMMAND_ZONELOWER = "LOWERDIM";
     // public static final String HW_COMMAND_ZONESTOP = "STOPDIM";

@@ -102,6 +102,7 @@ public class HwSerialBridgeHandler extends HwBridgeHandler implements SerialPort
             serialPort.notifyOnDataAvailable(true);
 
             sendMonitorCommands();
+            requestInitialStatus();
 
             updateStatus(ThingStatus.ONLINE);
 
@@ -159,10 +160,11 @@ public class HwSerialBridgeHandler extends HwBridgeHandler implements SerialPort
         if (serialPort != null) {
             serialPort.close();
         }
-
         serialPort = null;
         serialInput = null;
         serialOutput = null;
+
+        super.dispose();
 
         logger.debug("Finished disposing bridge.");
     }

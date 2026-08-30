@@ -67,18 +67,31 @@ public class HwKeypadModelData {
     static {
         MODEL_DATA.put("1B", new KeypadLayout(new int[] { 4 }, new int[] {}, false));
         MODEL_DATA.put("2B", new KeypadLayout(new int[] { 3, 5 }, new int[] {}, false));
+        MODEL_DATA.put("2SE", new KeypadLayout(new int[] { 3, 4 }, new int[] {}, false));
+        MODEL_DATA.put("2Barch", new KeypadLayout(new int[] { 23, 24 }, new int[] {}, false));
         MODEL_DATA.put("3B", new KeypadLayout(new int[] { 2, 4, 6 }, new int[] {}, false));
-        MODEL_DATA.put("4B", new KeypadLayout(new int[] { 1, 3, 5, 7 }, new int[] {}, false));
-        MODEL_DATA.put("5B", new KeypadLayout(new int[] { 2, 3, 4, 5, 6 }, new int[] {}, false));
-        MODEL_DATA.put("6B", new KeypadLayout(new int[] { 1, 2, 3, 4, 5, 6 }, new int[] {}, false));
-        MODEL_DATA.put("7B", new KeypadLayout(new int[] { 1, 2, 3, 4, 5, 6, 7 }, new int[] {}, false));
         MODEL_DATA.put("3BRL", new KeypadLayout(new int[] { 1, 3, 5 }, new int[] {}, true));
+        MODEL_DATA.put("4B", new KeypadLayout(new int[] { 1, 3, 5, 7 }, new int[] {}, false));
         MODEL_DATA.put("4FS", new KeypadLayout(new int[] { 1, 2, 3, 4 }, new int[] { 6, 7 }, false));
         MODEL_DATA.put("4S", new KeypadLayout(new int[] { 1, 2, 3, 4 }, new int[] { 6 }, true));
-        MODEL_DATA.put("4SIR", new KeypadLayout(new int[] { 1, 2, 3, 4 }, new int[] {}, true));
+        MODEL_DATA.put("5B", new KeypadLayout(new int[] { 2, 3, 4, 5, 6 }, new int[] {}, false));
         MODEL_DATA.put("5FS", new KeypadLayout(new int[] { 1, 2, 3, 4, 5, 7 }, new int[] {}, false));
         MODEL_DATA.put("5BRL", new KeypadLayout(new int[] { 1, 2, 3, 4, 5 }, new int[] {}, true));
+        // 16,17 (non-LED "scene" buttons) unverified against real hardware — flagged as a guess.
+        MODEL_DATA.put("5S2RL", new KeypadLayout(new int[] { 1, 2, 3, 4, 5 }, new int[] { 16, 17 }, true));
+        MODEL_DATA.put("6B", new KeypadLayout(new int[] { 1, 2, 3, 4, 5, 6 }, new int[] {}, false));
+        MODEL_DATA.put("LB6", new KeypadLayout(new int[] { 1, 3, 5, 6, 8, 10 }, new int[] {}, false));
         MODEL_DATA.put("6BRL", new KeypadLayout(new int[] { 1, 2, 3, 4, 5, 6 }, new int[] {}, true));
+        MODEL_DATA.put("7B", new KeypadLayout(new int[] { 1, 2, 3, 4, 5, 6, 7 }, new int[] {}, false));
+        MODEL_DATA.put("8SE", new KeypadLayout(new int[] { 1, 2, 3, 4, 6, 7, 8, 9 }, new int[] { 5 }, true));
+        MODEL_DATA.put("LB9", new KeypadLayout(new int[] { 1, 3, 5, 6, 8, 10, 11, 13, 15 }, new int[] {}, false));
+        MODEL_DATA.put("KP10", new KeypadLayout(new int[] { 1, 2, 3, 4, 5, 6, 7, 8, 9, 10 }, new int[] {}, true));
+        MODEL_DATA.put("10S2RL",
+                new KeypadLayout(new int[] { 1, 2, 3, 4, 5, 6, 7, 8, 9, 10 }, new int[] { 16, 17 }, true));
+        MODEL_DATA.put("KP15",
+                new KeypadLayout(new int[] { 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15 }, new int[] {}, true));
+        MODEL_DATA.put("15S2RL", new KeypadLayout(new int[] { 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15 },
+                new int[] { 16, 17 }, true));
         MODEL_DATA.put(HwKeypadConfig.DEFAULT_MODEL,
                 new KeypadLayout(new int[] { 1, 2, 3, 4, 5, 6, 7 }, new int[] {}, true)); // Generic: maximal fallback
     }

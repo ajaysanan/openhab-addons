@@ -58,6 +58,7 @@ import org.openhab.binding.lutron.internal.hw.HwDimmerHandler;
 import org.openhab.binding.lutron.internal.hw.HwIPBridgeHandler;
 import org.openhab.binding.lutron.internal.hw.HwKeypadHandler;
 import org.openhab.binding.lutron.internal.hw.HwSerialBridgeHandler;
+import org.openhab.binding.lutron.internal.hw.HwSwitchHandler;
 import org.openhab.binding.lutron.internal.radiora.RadioRAConstants;
 import org.openhab.binding.lutron.internal.radiora.handler.PhantomButtonHandler;
 import org.openhab.binding.lutron.internal.radiora.handler.RS232Handler;
@@ -110,8 +111,8 @@ public class LutronHandlerFactory extends BaseThingHandlerFactory {
                     PrgConstants.THING_TYPE_GRAFIKEYE, RadioRAConstants.THING_TYPE_RS232,
                     RadioRAConstants.THING_TYPE_DIMMER, RadioRAConstants.THING_TYPE_SWITCH,
                     RadioRAConstants.THING_TYPE_PHANTOM, HwConstants.THING_TYPE_HWSERIALBRIDGE,
-                    HwConstants.THING_TYPE_HWIPBRIDGE, THING_TYPE_CCO_PULSED, THING_TYPE_CCO_MAINTAINED,
-                    THING_TYPE_SYSVAR).collect(Collectors.toSet()));
+                    HwConstants.THING_TYPE_HWIPBRIDGE, HwConstants.THING_TYPE_HWSWITCH, THING_TYPE_CCO_PULSED,
+                    THING_TYPE_CCO_MAINTAINED, THING_TYPE_SYSVAR).collect(Collectors.toSet()));
 
     private final Logger logger = LoggerFactory.getLogger(LutronHandlerFactory.class);
 
@@ -211,6 +212,8 @@ public class LutronHandlerFactory extends BaseThingHandlerFactory {
             return new HwDimmerHandler(thing);
         } else if (thingTypeUID.equals(HwConstants.THING_TYPE_HWKEYPAD)) {
             return new HwKeypadHandler(thing);
+        } else if (thingTypeUID.equals(HwConstants.THING_TYPE_HWSWITCH)) {
+            return new HwSwitchHandler(thing);
         }
 
         return null;

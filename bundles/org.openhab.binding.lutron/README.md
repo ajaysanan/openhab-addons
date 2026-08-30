@@ -1,11 +1,11 @@
-# Lutron Binding
+Lutron Binding
 
 This binding integrates with [Lutron](https://www.lutron.com) lighting control and home automation systems.
 It contains support for four different types of Lutron systems via different bridge things:
 
 - RadioRA 2, HomeWorks QS, Caseta, RA2 Select, and other current systems that can be controlled via Lutron Integration Protocol (LIP) or LEAP
 - The original RadioRA system, referred to here as RadioRA Classic
-- Legacy HomeWorks RS232 Processors
+- Legacy HomeWorks Processors (RS232 and Telnet)
 - Grafik Eye 3x/4x systems with GRX-PRG or GRX-CI-PRG control interfaces
 
 Each is described in a separate section below.

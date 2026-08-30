@@ -149,6 +149,7 @@ public class HwIPBridgeHandler extends HwBridgeHandler {
         });
 
         sendMonitorCommands();
+        requestInitialStatus();
 
         messageSender = new Thread(this::sendCommandsThread, "Lutron HomeWorks sender");
         messageSender.start();
@@ -237,10 +238,17 @@ public class HwIPBridgeHandler extends HwBridgeHandler {
 
         MatchResult matchResult = this.session.waitFor(LOGIN_MATCH_REGEX, 1000);
 
-        if (matchResult.group() != null) {
-            return matchResult.group().contains(PROMPT_LNET) || matchResult.group().contains("login successful");
+        String matched;
+        try {
+            matched = matchResult.group();
+        } catch (IllegalStateException e) {
+            // No response within the timeout window — a communication hiccup, not a credentials
+            // rejection. Route through the IOException path so connect() schedules a retry instead
+            // of parking the bridge in CONFIGURATION_ERROR indefinitely.
+            throw new IOException("Timed out waiting for login response from bridge");
         }
-        return false;
+
+        return matched.contains(PROMPT_LNET) || matched.contains("login successful");
     }
 
     @Override
@@ -295,5 +303,6 @@ public class HwIPBridgeHandler extends HwBridgeHandler {
     @Override
     public void dispose() {
         disconnect();
+        super.dispose();
     }
 }
