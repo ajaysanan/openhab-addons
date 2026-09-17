@@ -26,6 +26,7 @@ import org.openhab.core.io.transport.serial.SerialPortIdentifier;
 import org.openhab.core.io.transport.serial.SerialPortManager;
 import org.openhab.core.io.transport.serial.UnsupportedCommOperationException;
 import org.openhab.core.thing.Bridge;
+import org.openhab.core.thing.Thing;
 import org.openhab.core.thing.ThingStatus;
 import org.openhab.core.thing.ThingStatusDetail;
 import org.slf4j.Logger;
@@ -151,6 +152,25 @@ public class HwSerialBridgeHandler extends HwBridgeHandler implements SerialPort
         } catch (IOException e) {
             logger.debug("Error writing to serial port: {}", e.getMessage(), e);
             updateStatus(ThingStatus.OFFLINE, ThingStatusDetail.COMMUNICATION_ERROR, "Error writing to port.");
+        }
+    }
+
+    @Override
+    public void thingUpdated(Thing thing) {
+        HwSerialBridgeConfig newConfiguration = thing.getConfiguration().as(HwSerialBridgeConfig.class);
+        int newBaud = (newConfiguration.getBaudRate() == null) ? HwSerialBridgeConfig.DEFAULT_BAUD
+                : newConfiguration.getBaudRate().intValue();
+        boolean needsReconnect = !java.util.Objects.equals(serialPortName, newConfiguration.getSerialPort())
+                || newBaud != baudRate;
+
+        this.thing = thing;
+
+        if (needsReconnect) {
+            dispose();
+            initialize();
+        } else {
+            updateTime = newConfiguration.getUpdateTime();
+            applyUpdateTimeSetting(updateTime);
         }
     }
 

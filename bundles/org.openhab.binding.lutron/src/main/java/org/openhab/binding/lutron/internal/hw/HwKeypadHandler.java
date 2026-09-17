@@ -48,6 +48,10 @@ public class HwKeypadHandler extends HwDeviceHandler {
     private static final String CHANNEL_LASTKEYPRESSED = "lastkeypressed";
     private static final String CHANNEL_KEYPADENABLED = "keypadenabled";
 
+    private static final long LED_REFRESH_DEBOUNCE_MS = 500;
+
+    private volatile long lastLedRefreshRequestMillis = 0;
+
     private final Logger logger = LoggerFactory.getLogger(HwKeypadHandler.class);
 
     public HwKeypadHandler(Thing thing) {
@@ -143,38 +147,49 @@ public class HwKeypadHandler extends HwDeviceHandler {
         }
 
         if (id.startsWith(CHANNEL_LED_PREFIX)) {
-            handleLedCommand(id, command);
+            handleLedCommand(channelUID, command);
         } else if (CHANNEL_KEYPADENABLED.equals(id)) {
-            handleEnabledCommand(command);
+            handleEnabledCommand(channelUID, command);
         } else if (CHANNEL_LASTKEYPRESSED.equals(id)) {
-            if (command instanceof RefreshType) {
+            if (command instanceof RefreshType && isLinked(channelUID)) {
                 sendToBridge(String.format("%s, %s", HW_COMMAND_KEYPADLASTBUTTON, getAddress()));
             }
         }
         // Button channels are trigger-kind and never receive commands.
     }
 
-    private void handleLedCommand(String channelId, Command command) {
+    private void handleLedCommand(ChannelUID channelUID, Command command) {
+        String channelId = channelUID.getId();
         String ledNumber = channelId.substring(CHANNEL_LED_PREFIX.length());
         if (command instanceof OnOffType) {
             String ledState = (command == OnOffType.ON) ? "1" : "0";
             sendToBridge(String.format("%s, %s, %s, %s", HW_COMMAND_LEDSET, getAddress(), ledNumber, ledState));
         } else if (command instanceof RefreshType) {
-            sendToBridge(String.format("%s, %s", HW_COMMAND_LEDGET, getAddress()));
+            if (!isLinked(channelUID)) {
+                return;
+            }
+            long now = System.currentTimeMillis();
+            if (now - lastLedRefreshRequestMillis > LED_REFRESH_DEBOUNCE_MS) {
+                lastLedRefreshRequestMillis = now;
+                sendToBridge(String.format("%s, %s", HW_COMMAND_LEDGET, getAddress()));
+            } else {
+                logger.trace("Skipping redundant LED refresh for keypad {}", getAddress());
+            }
         } else {
             logger.warn("Invalid command type {} received for channel {} device {}", command, channelId,
                     getThing().getUID());
         }
     }
 
-    private void handleEnabledCommand(Command command) {
+    private void handleEnabledCommand(ChannelUID channelUID, Command command) {
         if (command instanceof OnOffType) {
             String cmd = (command == OnOffType.ON) ? HW_COMMAND_KEYPADENABLE : HW_COMMAND_KEYPADDISABLE;
             sendToBridge(String.format("%s, %s", cmd, getAddress()));
-            // No response is sent from the keypad after enable/disable, so request it explicitly.
             sendToBridge(String.format("%s, %s", HW_COMMAND_KEYPADGETSTATE, getAddress()));
         } else if (command instanceof RefreshType) {
-            sendToBridge(String.format("%s, %s", HW_COMMAND_KEYPADGETSTATE, getAddress()));
+            if (isLinked(channelUID)) {
+                sendToBridge(String.format("%s, %s", HW_COMMAND_KEYPADGETSTATE, getAddress()));
+            }
         } else {
             logger.warn("Invalid command type {} received for channel keypadenabled device {}", command,
                     getThing().getUID());

@@ -304,6 +304,15 @@ public abstract class HwBridgeHandler extends BaseBridgeHandler {
         sendCommand(HW_COMMAND_VACATIONCHECK + ", verbose");
     }
 
+    protected void applyUpdateTimeSetting(Boolean updateTime) {
+        if (Boolean.TRUE.equals(updateTime)) {
+            startUpdateProcessorTimeJob();
+        } else if (updateTimeJob != null) {
+            updateTimeJob.cancel(false);
+            updateTimeJob = null;
+        }
+    }
+
     @Override
     public void dispose() {
         if (updateTimeJob != null) {

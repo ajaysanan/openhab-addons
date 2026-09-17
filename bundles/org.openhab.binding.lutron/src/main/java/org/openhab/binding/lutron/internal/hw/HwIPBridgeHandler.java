@@ -285,19 +285,25 @@ public class HwIPBridgeHandler extends HwBridgeHandler {
     @Override
     public void thingUpdated(Thing thing) {
         HwIPBridgeConfig newConfig = thing.getConfiguration().as(HwIPBridgeConfig.class);
-        boolean validConfig = validConfiguration(newConfig);
-        boolean needsReconnect = validConfig && !this.config.sameConnectionParameters(newConfig);
 
-        if (!validConfig || needsReconnect) {
+        if (!validConfiguration(newConfig)) {
             dispose();
+            this.thing = thing;
+            this.config = newConfig;
+            return;
+        }
+
+        if (!this.config.sameConnectionParameters(newConfig)) {
+            dispose();
+            this.thing = thing;
+            this.config = newConfig;
+            initialize();
+            return;
         }
 
         this.thing = thing;
         this.config = newConfig;
-
-        if (needsReconnect) {
-            initialize();
-        }
+        applyUpdateTimeSetting(newConfig.getUpdateTime());
     }
 
     @Override

@@ -24,6 +24,7 @@ import org.openhab.core.thing.Thing;
 import org.openhab.core.thing.ThingStatus;
 import org.openhab.core.thing.ThingStatusDetail;
 import org.openhab.core.types.Command;
+import org.openhab.core.types.RefreshType;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -75,14 +76,18 @@ public class HwDimmerHandler extends HwDeviceHandler {
 
     @Override
     public void handleCommand(ChannelUID channelUID, Command command) {
-        if (channelUID.getId().equals(CHANNEL_LIGHTLEVEL)) {
-            if (command instanceof Number number) {
-                int level = number.intValue();
-                outputLevel(level);
-            } else if (command.equals(OnOffType.ON)) {
-                outputLevel(defaultLevel);
-            } else if (command.equals(OnOffType.OFF)) {
-                outputLevel(0);
+        if (!channelUID.getId().equals(CHANNEL_LIGHTLEVEL)) {
+            return;
+        }
+        if (command instanceof Number number) {
+            outputLevel(number.intValue());
+        } else if (command.equals(OnOffType.ON)) {
+            outputLevel(defaultLevel);
+        } else if (command.equals(OnOffType.OFF)) {
+            outputLevel(0);
+        } else if (command instanceof RefreshType) {
+            if (isLinked(channelUID)) {
+                queryLevel();
             }
         }
     }

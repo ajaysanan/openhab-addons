@@ -23,6 +23,7 @@ import org.openhab.core.thing.Thing;
 import org.openhab.core.thing.ThingStatus;
 import org.openhab.core.thing.ThingStatusDetail;
 import org.openhab.core.types.Command;
+import org.openhab.core.types.RefreshType;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -72,8 +73,15 @@ public class HwSwitchHandler extends HwDeviceHandler {
 
     @Override
     public void handleCommand(ChannelUID channelUID, Command command) {
-        if (CHANNEL_SWITCH.equals(channelUID.getId()) && command instanceof OnOffType) {
+        if (!CHANNEL_SWITCH.equals(channelUID.getId())) {
+            return;
+        }
+        if (command instanceof OnOffType) {
             outputLevel(command == OnOffType.ON ? 100 : 0);
+        } else if (command instanceof RefreshType) {
+            if (isLinked(channelUID)) {
+                queryLevel();
+            }
         }
     }
 

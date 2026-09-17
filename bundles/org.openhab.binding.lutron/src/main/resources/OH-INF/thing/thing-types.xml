@@ -1047,7 +1047,7 @@
 	</thing-type>
 
 	<bridge-type id="hwserialbridge">
-	    <label>Legacy Homeworks Serial Bridge</label>
+	    <label>Legacy HomeWorks Serial Bridge</label>
 	    <description>RS232 access point to legacy Lutron HomeWorks lighting control system</description>
 
         <channels>
@@ -1105,7 +1105,7 @@
 	</bridge-type>
 
 	<bridge-type id="hwipbridge">
-	    <label>Legacy Homeworks IP Bridge</label>
+	    <label>Legacy HomeWorks IP Bridge</label>
 	    <description>Ethernet access point to legacy Lutron HomeWorks lighting control system</description>
 	    <semantic-equipment-tag>NetworkAppliance</semantic-equipment-tag>
 	    
@@ -1179,7 +1179,7 @@
 	        <bridge-type-ref id="hwserialbridge"/>
 	        <bridge-type-ref id="hwipbridge"/>
 	    </supported-bridge-type-refs>
-	    <label>Legacy Homeworks Dimmer</label>
+	    <label>Legacy HomeWorks Dimmer</label>
 	    <description>Controls dimmable loads for legacy HomeWorks systems</description>
 		<category>Lightbulb</category>
 		<semantic-equipment-tag>LightSource</semantic-equipment-tag>
@@ -1210,7 +1210,7 @@
 	        <bridge-type-ref id="hwserialbridge"/>
 	        <bridge-type-ref id="hwipbridge"/>
 	    </supported-bridge-type-refs>
-        <label>Legacy Homeworks Switch</label>
+        <label>Legacy HomeWorks Switch</label>
         <description>A HomeWorks dimmer address internally programmed as an on/off switch</description>
 	    <category>WallSwitch</category>
 	    <semantic-equipment-tag>WallSwitch</semantic-equipment-tag>
@@ -1237,7 +1237,7 @@
 	        <bridge-type-ref id="hwserialbridge"/>
 	        <bridge-type-ref id="hwipbridge"/>
 	    </supported-bridge-type-refs>
-        <label>Legacy Homeworks Keypad</label>
+        <label>Legacy HomeWorks Keypad</label>
         <description>Lutron seeTouch wired wall keypad (legacy HomeWorks)</description>
 	    <channels>
 	        <channel id="lastkeypressed" typeId="buttonpress"/>
