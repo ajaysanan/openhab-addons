@@ -69,6 +69,7 @@ public class BCSConstants {
 
     public enum CommandType {
         VOLUME,
+        VOLUMERELATIVE,
         GAIN,
         MUTEZONE,
         UNMUTEZONE,

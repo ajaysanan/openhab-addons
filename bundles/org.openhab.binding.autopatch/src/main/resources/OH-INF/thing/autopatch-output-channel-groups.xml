@@ -24,6 +24,9 @@
             <channel id="connectedinput" typeId="rwtype-outputzone-numeric-mixed">
                 <label>Output Zone Group Connected Input</label>
             </channel>
+            <channel id="volumerelative" typeId="wotype-volumerelative">
+                <label>Output Zone Group Volume Adjustment</label>
+            </channel>
             <channel id="reset" typeId="wotype-zonecommand"/>
         </channels>
     </channel-group-type>

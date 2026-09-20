@@ -113,5 +113,14 @@
         </command>
         <autoUpdatePolicy>veto</autoUpdatePolicy>
     </channel-type>
+    
+    <channel-type id="wotype-volumerelative">
+        <item-type>Number</item-type>
+        <kind>state</kind>
+        <label>Relative Volume Adjustment</label>
+        <description>Adjusts every zone in the group by this many percentage points</description>
+        <state min="-100" max="100" step="0.5" pattern="%+.1f %%"/>
+        <autoUpdatePolicy>veto</autoUpdatePolicy>
+    </channel-type>
        
 </thing:thing-descriptions>

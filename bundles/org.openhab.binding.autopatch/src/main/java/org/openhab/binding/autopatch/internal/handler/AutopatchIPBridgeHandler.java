@@ -174,8 +174,9 @@ public class AutopatchIPBridgeHandler extends AutopatchBaseBridgeHandler {
             socket.bind(new InetSocketAddress(hostifAddress, 0));
             socket.connect(new InetSocketAddress(ipAddress, port), SOCKET_CONNECT_TIMEOUT);
         } catch (IOException e) {
-            logger.error("Failed to get socket on port {} for thing {} at {}: {}", port, thing.getUID(), ipAddress);
-            disconnect();
+            logger.error("Failed to get socket on port {} for thing {} at {}: {}", port, thing.getUID(), ipAddress,
+                    e.getMessage());
+            closeSocket();
             if (!isDisposed) {
                 scheduleConnectRetry(reconnectInterval);
             }

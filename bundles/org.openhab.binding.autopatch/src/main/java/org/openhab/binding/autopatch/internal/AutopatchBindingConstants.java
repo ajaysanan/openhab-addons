@@ -69,6 +69,7 @@ public class AutopatchBindingConstants {
     public static final String CHANNEL_GAIN = "settings#gain";
     public static final String CHANNEL_OUTPUTZONELIST = "settings#outputzonelist";
     public static final String CHANNEL_VOLUME = "settings#volume";
+    public static final String CHANNEL_VOLUMERELATIVE = "settings#volumerelative";
     public static final String CHANNEL_MAXVOLUME = "settings#maxvolume";
     public static final String CHANNEL_MUTE = "settings#mute";
     public static final String CHANNEL_CONNECTEDINPUT = "settings#connectedinput";

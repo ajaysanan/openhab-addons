@@ -108,7 +108,7 @@ public class BCSFunctions {
             case BALANCE:
                 return (response == null ? "" : response.toString());
             case VOLUME:
-                return (response == null ? "" : Integer.toString((int) Math.round(((response + 700) / 10) * 1.25)));
+                return (response == null ? "" : Integer.toString(Math.round((response + 700) / 10.0f * 1.25f)));
             default:
                 break;
         }
@@ -120,6 +120,8 @@ public class BCSFunctions {
         switch (commandName) {
             case VOLUME:
                 return Integer.toString((int) (Float.parseFloat(value) / .125) - 700);
+            case VOLUMERELATIVE:
+                return Integer.toString(Math.round(Float.parseFloat(value) * 8));
             case GAIN:
             case TREBLE:
             case BASS:
@@ -195,6 +197,7 @@ public class BCSFunctions {
                     .append(zonelist).append(BCSCommand.getCommandCode(commandType));
             switch (commandType) {
                 case VOLUME:
+                case VOLUMERELATIVE:
                 case BALANCE:
                 case GAIN:
                 case TREBLE:

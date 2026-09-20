@@ -70,6 +70,8 @@ public final class BCSCommand {
     static {
         BCSMap.put(CommandType.VOLUME, new CommandList<PercentType>(ZoneType.OUTPUT, VOLUME_ABSOLUTE, STATUS_VOLUME,
                 false, false, CHANNEL_VOLUME, PercentType.class));
+        BCSMap.put(CommandType.VOLUMERELATIVE, new CommandList<DecimalType>(ZoneType.OUTPUT, VOLUME_RELATIVE,
+                STATUS_VOLUME, false, false, CHANNEL_VOLUMERELATIVE, DecimalType.class));
         BCSMap.put(CommandType.GAIN, new CommandList<DecimalType>(ZoneType.INPUT, VOLUME_ABSOLUTE, STATUS_VOLUME, false,
                 false, CHANNEL_GAIN, DecimalType.class));
         BCSMap.put(CommandType.MUTEZONE, new CommandList<OnOffType>(ZoneType.OUTPUT, VOLUME_MUTE, STATUS_VOLUME, false,

@@ -22,6 +22,7 @@ import org.openhab.binding.autopatch.internal.command.BCSCommand;
 import org.openhab.binding.autopatch.internal.command.BCSConstants.CommandType;
 import org.openhab.binding.autopatch.internal.command.BCSFunctions;
 import org.openhab.binding.autopatch.internal.config.AutopatchGroupConfig;
+import org.openhab.core.library.types.OnOffType;
 import org.openhab.core.library.types.StringType;
 import org.openhab.core.thing.Bridge;
 import org.openhab.core.thing.Channel;
@@ -120,14 +121,23 @@ public class AutopatchOutputZoneGroupHandler extends BaseThingHandler {
                 return;
             }
             if (isLinked(channelUID)) {
-                sendMessage(BCSFunctions.buildChangeCommand(commandtype, zoneLevel, zones, command.toString()));
+                String targetZones = zones;
+                if (commandtype == CommandType.VOLUME || commandtype == CommandType.VOLUMERELATIVE) {
+                    List<Integer> unmuted = getUnmutedZoneNumbers();
+                    if (unmuted.isEmpty()) {
+                        logger.debug("All zones in group {} are muted; skipping volume change", getThing().getUID());
+                        return;
+                    }
+                    targetZones = unmuted.toString().replaceAll("[\\[,\\]]", "");
+                }
+
+                sendMessage(BCSFunctions.buildChangeCommand(commandtype, zoneLevel, targetZones, command.toString()));
                 for (Integer zone : zoneNumbers) {
                     if (zone != null) {
                         sendMessage(BCSFunctions.buildStatusCommand(commandtype, zoneLevel, zone.toString()));
                     }
                 }
             }
-
         }
     }
 
@@ -168,6 +178,17 @@ public class AutopatchOutputZoneGroupHandler extends BaseThingHandler {
     public void updateChannelState(String channelId, String value) {
         logger.trace("  Updating {} to {}", channelId, value);
         updateState(channelId, new StringType(value));
+    }
+
+    private List<Integer> getUnmutedZoneNumbers() {
+        Bridge bridge = getBridge();
+        if (bridge == null) {
+            return List.of();
+        }
+        return bridge.getThings().stream().map(Thing::getHandler).filter(AutopatchOutputZoneHandler.class::isInstance)
+                .map(AutopatchOutputZoneHandler.class::cast).filter(zh -> zoneNumbers.contains(zh.zoneNumber))
+                .filter(zh -> zh.getThing().getStatus() == ThingStatus.ONLINE)
+                .filter(zh -> zh.getMuteState() != OnOffType.ON).map(zh -> zh.zoneNumber).toList();
     }
 
 }
